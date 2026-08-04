@@ -48,6 +48,19 @@
     brews = [
       "git"
       "zsh"
+
+      # herdr is a client/server tool: the `herdr` command talks to a
+      # background server over a socket in ~/.config/herdr, and fails with
+      # "server did not become ready" if it is not running.
+      #
+      # start_service registers it to launch at login and starts it now;
+      # restart_service = "changed" restarts it after an upgrade so the
+      # running server matches the installed binary.
+      {
+        name = "herdr";
+        start_service = true;
+        restart_service = "changed";
+      }
       # neovim intentionally not here — it comes from Nix via home.nix, so its
       # version is pinned by flake.lock rather than tracking Homebrew.
     ];

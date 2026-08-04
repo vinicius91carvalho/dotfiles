@@ -1,0 +1,9 @@
+# This directory is linked to ~/.config/herdr, so herdr writes its runtime
+# state here alongside the config: sockets, logs, session.json, lock files.
+#
+# This repo is public, so the rule is deny-by-default: ignore everything and
+# opt individual files back in. That way a future herdr release writing new
+# state here cannot leak it by accident.
+*
+!.gitignore
+!config.toml

@@ -76,12 +76,25 @@
     package = null;
     settings = {
       background-opacity = 0.8;
+      # Blur whatever shows through the transparent background. Only has a
+      # visible effect while background-opacity is below 1.
+      background-blur = 50;
       theme = "Dracula";
       command = "/bin/zsh";
-      window-decoration = "none";
-      # macos-titlebar-style = "hidden";
-      font-family = "Hack Nerd Font";
+      #window-decoration = "none";
+      macos-titlebar-style = "hidden";
+      # Must be the "Mono" variant. Ghostty only accepts strictly monospaced
+      # families, and the plain "Hack Nerd Font" has double-width icon glyphs
+      # that disqualify it — it silently falls back to the default font.
+      # Check what is actually available with:
+      #   ghostty +list-fonts | grep Hack
+      font-family = "Hack Nerd Font Mono";
       font-size = 15.0;
+
+      # Breathing room between the text and the window edge. The default is
+      # 2px, which sits almost flush. Raise or lower to taste.
+      window-padding-x = 10;
+      window-padding-y = 10;
     };
   };
 
@@ -114,15 +127,6 @@
 
       # Ctrl-F accepts the inline autosuggestion.
       bindkey '^f' autosuggest-accept
-
-      # Name $HOME as a zsh directory so `~home` works as a path anywhere:
-      #   ls ~home   cp file ~home/   du -sh ~home/Downloads
-      hash -d home=$HOME
-
-      # ...and let `cd home` work without the tilde. cdablevars only applies
-      # when the argument is not already a real directory, so a local ./home
-      # still wins and nothing is shadowed.
-      setopt cdablevars
     '';
 
     shellAliases = {
@@ -253,4 +257,10 @@
   # can be committed, which is what pins your plugin versions.
   xdg.configFile."nvim".source =
     config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/config/nvim";
+  xdg.configFile."herdr".source =
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/config/herdr";
+
+
 }
+
+
