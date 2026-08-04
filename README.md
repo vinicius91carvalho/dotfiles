@@ -167,7 +167,7 @@ grep -rn "vinicius91carvalho" --include="*.nix" .
 | `configuration.nix` | System: Homebrew apps, dock, finder, trackpad, locale |
 | `keyboard-shortcuts.nix` | macOS keyboard shortcuts |
 | `home.nix` | User: shell, git, ghostty, neovim, CLI tools, fonts, ssh |
-| `config/nvim/` | LazyVim config, linked to `~/.config/nvim` |
+| `.config/` | Config directories, mirroring `~/.config` (nvim, herdr) |
 | `rebuild.sh` | Applies everything |
 
 How the pieces relate:
@@ -344,7 +344,7 @@ programs.ghostty = {
 For a whole directory:
 
 ```nix
-xdg.configFile."myapp".source = ./config/myapp;
+xdg.configFile."myapp".source = ./.config/myapp;
 ```
 
 That copy is read-only. If the tool needs to write into its own config
@@ -352,39 +352,68 @@ directory, link the working copy instead:
 
 ```nix
 xdg.configFile."myapp".source =
-  config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/config/myapp";
+  config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/.config/myapp";
 ```
+
+### Where files live in this repo
+
+Paths mirror the home directory exactly, so you can always tell where
+something lands:
+
+| In this repo | Ends up at |
+| --- | --- |
+| `.config/nvim/` | `~/.config/nvim` |
+| `.config/herdr/` | `~/.config/herdr` |
+| `.claude/` | `~/.claude` |
+
+New config goes in the same place it would live at home — no translation,
+no guessing.
 
 ---
 
-## Neovim and LazyVim
+## Neovim
 
-Neovim comes from Nix, so its version is pinned. [LazyVim](https://www.lazyvim.org/)
-does not — it is plain Lua in `config/nvim/`, and lazy.nvim downloads plugins
-at runtime.
+Neovim comes from Nix, so its version is pinned by `flake.lock`. The config is
+plain Lua in `.config/nvim/`, with [lazy.nvim](https://lazy.folke.io/) fetching
+plugins at runtime.
 
-That is on purpose: lazy.nvim writes `lazy-lock.json` into its own config
-directory, which a read-only Nix store path forbids. So the directory is
-linked to the working copy:
+The directory is linked to the working copy rather than copied into the Nix
+store, because lazy.nvim writes `lazy-lock.json` next to its own config and a
+store path is read-only:
 
 ```
-~/.config/nvim → ~/.dotfiles/config/nvim → this repo
+~/.config/nvim → ~/.dotfiles/.config/nvim → this repo
 ```
 
-Editing the Lua takes effect immediately, no rebuild. **`lazy-lock.json` is
-what pins plugin versions — commit it.** It is LazyVim's equivalent of
-`flake.lock`.
+Editing the Lua takes effect on the next `nvim` launch — no rebuild.
+**`lazy-lock.json` pins plugin versions, so commit it.** It is lazy.nvim's
+equivalent of `flake.lock`.
 
-| Command | Does |
+Layout:
+
+| File | Holds |
 | --- | --- |
-| `:Lazy` | Plugin UI — install, update, profile |
-| `:Lazy update` | Update plugins, rewrite `lazy-lock.json` |
-| `:Lazy restore` | Roll back to the committed `lazy-lock.json` |
-| `:LazyExtras` | Enable language packs |
-| `:checkhealth` | Find missing dependencies |
+| `init.lua` | Loads the three modules below, in order |
+| `lua/vim_config.lua` | Options and the leader key |
+| `lua/plugin.lua` | lazy.nvim bootstrap, loads every file in `lua/plugins/` |
+| `lua/keys.lua` | Keymaps |
+| `lua/plugins/*.lua` | One file per group — navigation, git, ui |
 
-Options, keymaps and autocmds go in `config/nvim/lua/config/`; plugins in
-`config/nvim/lua/plugins/`.
+Order matters in `init.lua`: options come first because lazy.nvim resolves
+`<leader>` when it registers each plugin's `keys` spec. Load them the other
+way round and every `<leader>` binding silently attaches to backslash.
+
+| Key | Does |
+| --- | --- |
+| `<leader>e` | Oil file browser |
+| `<leader>f` / `<leader>s` / `<leader>b` | Files / grep / buffers |
+| `<leader>g` | Neogit |
+| `gd` | Goto definition (needs an LSP attached) |
+| `<Esc>` | Save |
+| `<C-a>` | Select all |
+
+`:Lazy` opens the plugin UI; `:Lazy update` refreshes and rewrites the
+lockfile; `:Lazy restore` returns to the committed commits.
 
 One gotcha: `programs.neovim` always generates a small `init.lua` (it disables
 the node/perl/ruby/python providers) and would write it into
@@ -392,6 +421,21 @@ the node/perl/ruby/python providers) and would write it into
 `sideloadInitLua = true` passes that Lua through the neovim wrapper instead.
 Without it the build fails with
 `Error installing file '.config/nvim/init.lua' outside $HOME`.
+
+---
+
+## herdr
+
+[herdr](https://herdr.dev) is a client/server terminal multiplexer. The
+formula is declared with `start_service = true`, so the background server is
+registered at login — without it the client fails with *"server did not become
+ready"*.
+
+Its directory is linked out-of-store like Neovim's, because herdr writes
+runtime state (sockets, logs, `session.json`) alongside `config.toml`. Since
+this repo is public, `.config/herdr/.gitignore` denies everything by default
+and opts `config.toml` back in, so a future release writing new state there
+cannot leak it by accident.
 
 ---
 

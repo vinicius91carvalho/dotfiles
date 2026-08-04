@@ -26,8 +26,8 @@
     tree
     wget
 
-    # Patched font with programming ligatures and icon glyphs. LazyVim's UI
-    # (file icons, statusline separators) needs a Nerd Font to render.
+    # Patched font with icon glyphs. The nvim UI (file icons, statusline
+    # separators) and starship both need a Nerd Font to render properly.
     nerd-fonts.hack
   ];
 
@@ -122,11 +122,18 @@
     syntaxHighlighting.enable = true;
     # ~/.zshrc
     initContent = ''
-      # Claude Code installs itself to ~/.local/bin and is not managed by Nix.
-      export PATH="$HOME/.local/bin:$PATH"
-
       # Ctrl-F accepts the inline autosuggestion.
       bindkey '^f' autosuggest-accept
+
+      # Name this repo as a zsh directory, so `~home` is a path anywhere:
+      #   nvim ~home/home.nix     ls ~home/config     git -C ~home status
+      # Tab completion works after the `~`, e.g. `nvim ~home/<TAB>`.
+      hash -d home=$HOME/.dotfiles
+
+      # ...and let `cd home` work without the tilde. cdablevars only applies
+      # when the argument is not already a real directory, so a local ./home
+      # still wins and nothing is shadowed.
+      setopt cdablevars
     '';
 
     shellAliases = {
@@ -230,16 +237,16 @@
   };
 
   ##########################################################################
-  # Neovim + LazyVim
+  # Neovim
   #
   # The package comes from Nix (moved off Homebrew so the version is pinned
   # by flake.lock).
   #
   # The module always generates a small init.lua to disable the node/perl/ruby/
   # python providers, and would write it to ~/.config/nvim/init.lua — which
-  # collides with the LazyVim directory linked below. `sideloadInitLua` passes
+  # collides with the config directory linked below. `sideloadInitLua` passes
   # that Lua through the neovim wrapper instead of writing the file, leaving
-  # the whole nvim config directory to LazyVim.
+  # the whole nvim config directory to lazy.nvim.
   ##########################################################################
   programs.neovim = {
     enable = true;
@@ -248,18 +255,35 @@
     sideloadInitLua = true;
   };
 
-  # LazyVim lives as plain Lua in ./config/nvim, linked to ~/.config/nvim.
+  # The nvim config lives as plain Lua in ./.config/nvim.
   #
   # `mkOutOfStoreSymlink` links to the working copy rather than to a read-only
-  # copy in the Nix store. That matters: lazy.nvim writes lazy-lock.json (and
-  # `:LazyExtras` writes lazyvim.json) into its own config directory, which a
-  # store path would forbid. This way those files land back in this repo and
-  # can be committed, which is what pins your plugin versions.
+  # copy in the Nix store. That matters: lazy.nvim writes lazy-lock.json into
+  # its own config directory, which a store path would forbid. This way the
+  # lockfile lands back in this repo and can be committed, which is what pins
+  # the plugin versions.
   xdg.configFile."nvim".source =
-    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/config/nvim";
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/.config/nvim";
   xdg.configFile."herdr".source =
-    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/config/herdr";
-
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/.config/herdr";
+  ##########################################################################
+  # Claude Code
+  #
+  # `home.file`, not `xdg.configFile`: Claude Code reads ~/.claude, and
+  # xdg.configFile is rooted at ~/.config — it would land these in
+  # ~/.config/.claude, which nothing ever reads.
+  #
+  # Individual files, not the whole directory: ~/.claude also holds history,
+  # caches, project transcripts and credentials. Linking the directory would
+  # drag all of that into this public repo.
+  #
+  # CLAUDE.md points at AGENTS.md so the repo keeps one canonical set of
+  # agent instructions, whatever tool happens to read it.
+  ##########################################################################
+  home.file.".claude/settings.json".source =
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/.claude/settings.json";
+  home.file.".claude/CLAUDE.md".source =
+    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/AGENTS.md";
 
 }
 

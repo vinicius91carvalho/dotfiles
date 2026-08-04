@@ -14,10 +14,13 @@
 
   users.users.vinicius91carvalho.home = "/Users/vinicius91carvalho";
 
-  # Claude Code is deliberately NOT declared anywhere in this config. It is
-  # installed with its own native installer at ~/.local/share/claude and
-  # updates itself, which Nix would fight. On a fresh machine, reinstall it:
-  #   curl -fsSL https://claude.ai/install.sh | bash
+  # Claude Code comes from the `claude-code` cask declared below, not from its
+  # native installer. Only ever use one: the native installer puts a `claude`
+  # in ~/.local/bin that shadows the cask's, and the two then update on
+  # separate schedules and drift apart.
+  #
+  # Settings and history live in ~/.claude and ~/.claude.json, which are
+  # independent of how the binary was installed and survive switching.
 
   ############################################################################
   # Homebrew. nix-homebrew installs and owns the Homebrew prefix itself;
@@ -68,8 +71,8 @@
     casks = [
       "ghostty"
       "claude" # Claude desktop app (distinct from the Claude Code CLI)
+      "claude-code"
       "google-chrome"
-
       # Setapp is a subscription launcher: it installs and updates its own
       # apps into /Applications/Setapp, so Nix can only declare Setapp
       # itself. After signing in on a fresh machine, re-install from Setapp:
