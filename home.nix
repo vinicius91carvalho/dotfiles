@@ -1,8 +1,8 @@
-{ pkgs, config, ... }:
+{ pkgs, config, username, ... }:
 
 {
-  home.username = "vinicius91carvalho";
-  home.homeDirectory = "/Users/vinicius91carvalho";
+  home.username = username;
+  home.homeDirectory = "/Users/${username}";
 
   # Leave at the release this config was first written against. It pins
   # backwards-compatible defaults; it is not a version to keep bumping.

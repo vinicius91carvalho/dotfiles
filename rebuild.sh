@@ -3,6 +3,10 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 ln -sfn "$DIR" ~/.dotfiles
 
+# The account the config is applied to. Defaults to whoever runs this script,
+# so a new machine needs no edit; override by exporting DOTFILES_USER.
+DOTFILES_USER="${DOTFILES_USER:-$(id -un)}"
+
 # Nix only sees files that git tracks, so a brand new .nix file is invisible
 # until it is at least staged.
 git -C "$DIR" add -AN . >/dev/null 2>&1 || true
@@ -12,4 +16,7 @@ git -C "$DIR" add -AN . >/dev/null 2>&1 || true
 # by root, which breaks every later `nix` command you run as yourself.
 nix flake lock "$DIR"
 
-exec sudo darwin-rebuild switch --flake ~/.dotfiles#mac
+# sudo starts with a clean environment, so DOTFILES_USER has to be handed over
+# explicitly. --impure is what lets the flake read it at all.
+exec sudo DOTFILES_USER="$DOTFILES_USER" \
+  darwin-rebuild switch --impure --flake ~/.dotfiles#mac

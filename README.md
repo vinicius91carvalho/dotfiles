@@ -10,8 +10,9 @@ settings), [home-manager](https://github.com/nix-community/home-manager)
 (Mac apps).
 
 **Forking this?** Jump to [Make it yours](#make-it-yours) — there are about ten
-values you must change before applying it, or you will get my username, my
-locale and my GPG key.
+values you must change before applying it, or you will get my locale and my GPG
+key. The username is not one of them: it comes from `$DOTFILES_USER`, which
+`rebuild.sh` defaults to whoever runs it.
 
 ---
 
@@ -46,8 +47,9 @@ machine.
 fetch it once with `nix run`:
 
 ```sh
-sudo nix run github:nix-darwin/nix-darwin/nix-darwin-26.05#darwin-rebuild -- \
-  switch --flake .#mac
+sudo DOTFILES_USER="$(id -un)" \
+  nix run github:nix-darwin/nix-darwin/nix-darwin-26.05#darwin-rebuild -- \
+  switch --impure --flake .#mac
 ```
 
 Every time after that, just:
@@ -75,16 +77,24 @@ Every time after that, just:
 Nothing here touches the machine. Work down the list; each step is slower and
 catches more.
 
+Every command that evaluates the flake needs `--impure` and `DOTFILES_USER`,
+because the username is read from the environment. Export it once for the
+session:
+
+```sh
+export DOTFILES_USER="$(id -un)"
+```
+
 **1. Type-check the config** (seconds):
 
 ```sh
-nix flake check --no-build
+nix flake check --impure --no-build
 ```
 
 **2. Build the whole system without activating it** (no `sudo`, no changes):
 
 ```sh
-darwin-rebuild build --flake .#mac
+darwin-rebuild build --impure --flake .#mac
 ```
 
 This leaves a `./result` symlink. If it fails, nothing has happened to your
@@ -131,11 +141,6 @@ Copy the repo, then change these. Everything else is portable.
 | File | Value | Change to |
 | --- | --- | --- |
 | `configuration.nix` | `nixpkgs.hostPlatform = "aarch64-darwin"` | `"x86_64-darwin"` on an Intel Mac |
-| `configuration.nix` | `system.primaryUser` | Your macOS username |
-| `configuration.nix` | `nix-homebrew.user` | Your macOS username |
-| `configuration.nix` | `users.users.vinicius91carvalho.home` | Your username and home path |
-| `flake.nix` | `home-manager.users.vinicius91carvalho` | Your macOS username |
-| `home.nix` | `home.username`, `home.homeDirectory` | Your username and home path |
 | `home.nix` | `settings.user.name`, `settings.user.email` | Your git identity |
 | `home.nix` | `signing.key` | Your GPG key id, or delete the `signing` block |
 | `configuration.nix` | `AppleLanguages`, `AppleLocale` | Your language and locale (mine is `en-BR`) |
@@ -150,7 +155,13 @@ Two more worth knowing:
 - **`system.defaults`** (dock, finder, trackpad) are my preferences. They are
   harmless, but they are opinions, not defaults.
 
-Find every place my username appears:
+The username needs no editing. `flake.nix` reads `DOTFILES_USER` from the
+environment and threads it into `configuration.nix` and `home.nix`, so the
+same repo applies unchanged on any account. It is the one impure thing in the
+config, which is why every command carries `--impure`; the flake fails with a
+clear message if the variable is unset.
+
+Find whatever else of mine is still hardcoded:
 
 ```sh
 grep -rn "vinicius91carvalho" --include="*.nix" .
@@ -173,7 +184,7 @@ grep -rn "vinicius91carvalho" --include="*.nix" .
 How the pieces relate:
 
 ```
-rebuild.sh → darwin-rebuild switch --flake ~/.dotfiles#mac
+rebuild.sh → darwin-rebuild switch --impure --flake ~/.dotfiles#mac
                └── flake.nix → darwinConfigurations."mac"
                      ├── configuration.nix  → macOS settings + Homebrew
                      │     └── keyboard-shortcuts.nix
@@ -217,16 +228,16 @@ one: `"with" = "On my way!";`.
 ## Everyday use
 
 ```sh
-./rebuild.sh                 # apply the config
-nix flake check --no-build   # type-check only
-nix flake update             # update all inputs, then rebuild
-nix flake update nixpkgs     # update one input
+./rebuild.sh                          # apply the config
+nix flake check --impure --no-build   # type-check only
+nix flake update                      # update all inputs, then rebuild
+nix flake update nixpkgs              # update one input
 sudo darwin-rebuild --rollback
 ```
 
 `rebuild.sh` links the repo to `~/.dotfiles`, stages new files (Nix only sees
 files git knows about), refreshes `flake.lock` as your own user, then runs
-`sudo darwin-rebuild switch`.
+`sudo darwin-rebuild switch --impure` with `DOTFILES_USER` set to your account.
 
 I commit only after a rebuild works, so the git history is a history of
 configs that actually ran.
@@ -629,5 +640,5 @@ rather than just the files.
 To read back what an option actually resolves to:
 
 ```sh
-nix eval '.#darwinConfigurations.mac.config.system.defaults.dock.autohide'
+nix eval --impure '.#darwinConfigurations.mac.config.system.defaults.dock.autohide'
 ```

@@ -1,4 +1,4 @@
-{ ... }:
+{ username, ... }:
 
 {
   imports = [ ./keyboard-shortcuts.nix ];
@@ -9,10 +9,10 @@
   nixpkgs.config.allowUnfree = true;
   nixpkgs.hostPlatform = "aarch64-darwin"; # use x86_64-darwin for Intel CPU
 
-  system.primaryUser = "vinicius91carvalho";
+  system.primaryUser = username;
   system.stateVersion = 6;
 
-  users.users.vinicius91carvalho.home = "/Users/vinicius91carvalho";
+  users.users.${username}.home = "/Users/${username}";
 
   # Claude Code comes from the `claude-code` cask declared below, not from its
   # native installer. Only ever use one: the native installer puts a `claude`
@@ -28,7 +28,7 @@
   ############################################################################
   nix-homebrew = {
     enable = true;
-    user = "vinicius91carvalho";
+    user = username;
 
     # This Mac already had Homebrew installed the normal way, and nix-homebrew
     # refuses to take over an existing prefix unless told to. Migration deletes
