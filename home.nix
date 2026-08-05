@@ -279,9 +279,17 @@
   #
   # CLAUDE.md points at AGENTS.md so the repo keeps one canonical set of
   # agent instructions, whatever tool happens to read it.
+  #
+  # settings.json is deliberately NOT managed here. Claude Code rewrites it
+  # itself (/config, theme changes, statusline setup) by writing a temp file
+  # and rename()ing it into place, which replaces the symlink with a regular
+  # file instead of writing through it. Nix loses that race every time: the
+  # file silently detaches from the repo, and the next activation aborts
+  # because the backup from the previous activation is already there.
+  #
+  # ./.claude/settings.json stays in the repo as the seed to copy onto a new
+  # machine, but ~/.claude/settings.json belongs to Claude Code.
   ##########################################################################
-  home.file.".claude/settings.json".source =
-    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/.claude/settings.json";
   home.file.".claude/CLAUDE.md".source =
     config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/AGENTS.md";
 

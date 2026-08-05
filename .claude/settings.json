@@ -1,5 +1,18 @@
 {
   "model": "opus[1m]",
+  "statusLine": {
+    "type": "command",
+    "command": "bash /Users/vinicius91carvalho/.claude/statusline.sh"
+  },
+  "extraKnownMarketplaces": {
+    "harness-engineering": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/vinicius91carvalho/harness-engineering.git"
+      }
+    }
+  },
+  "tui": "fullscreen",
   "theme": "dark-daltonized",
-  "tui": "fullscreen"
+  "skipDangerousModePermissionPrompt": true
 }
