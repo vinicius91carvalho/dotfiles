@@ -10,9 +10,10 @@ settings), [home-manager](https://github.com/nix-community/home-manager)
 (Mac apps).
 
 **Forking this?** Jump to [Make it yours](#make-it-yours) — there are about ten
-values you must change before applying it, or you will get my locale and my GPG
-key. The username is not one of them: it comes from `$DOTFILES_USER`, which
-`rebuild.sh` defaults to whoever runs it.
+values you must change before applying it, or you will get my locale and my git
+identity. The username and the GPG key are not among them: they come from
+`$DOTFILES_USER`, which `rebuild.sh` defaults to whoever runs it, and
+`$DOTFILES_GPG_KEY`, which turns signing off when unset.
 
 ---
 
@@ -79,10 +80,11 @@ catches more.
 
 Every command that evaluates the flake needs `--impure` and `DOTFILES_USER`,
 because the username is read from the environment. Export it once for the
-session:
+session, along with the signing key if this machine holds it:
 
 ```sh
 export DOTFILES_USER="$(id -un)"
+export DOTFILES_GPG_KEY=EA380CFFC7FBC723   # omit to build with signing off
 ```
 
 **1. Type-check the config** (seconds):
@@ -142,7 +144,6 @@ Copy the repo, then change these. Everything else is portable.
 | --- | --- | --- |
 | `configuration.nix` | `nixpkgs.hostPlatform = "aarch64-darwin"` | `"x86_64-darwin"` on an Intel Mac |
 | `home.nix` | `settings.user.name`, `settings.user.email` | Your git identity |
-| `home.nix` | `signing.key` | Your GPG key id, or delete the `signing` block |
 | `configuration.nix` | `AppleLanguages`, `AppleLocale` | Your language and locale (mine is `en-BR`) |
 | `configuration.nix` | `brews`, `casks`, `masApps` | Your apps — mine are just examples |
 
@@ -155,11 +156,12 @@ Two more worth knowing:
 - **`system.defaults`** (dock, finder, trackpad) are my preferences. They are
   harmless, but they are opinions, not defaults.
 
-The username needs no editing. `flake.nix` reads `DOTFILES_USER` from the
-environment and threads it into `configuration.nix` and `home.nix`, so the
-same repo applies unchanged on any account. It is the one impure thing in the
-config, which is why every command carries `--impure`; the flake fails with a
-clear message if the variable is unset.
+The username and the GPG key need no editing. `flake.nix` reads
+`DOTFILES_USER` and `DOTFILES_GPG_KEY` from the environment and threads them
+into `configuration.nix` and `home.nix`, so the same repo applies unchanged on
+any account. They are the impure things in the config, which is why every
+command carries `--impure`. An unset `DOTFILES_USER` fails with a clear
+message; an unset `DOTFILES_GPG_KEY` just leaves commit signing off.
 
 Find whatever else of mine is still hardcoded:
 
@@ -237,7 +239,8 @@ sudo darwin-rebuild --rollback
 
 `rebuild.sh` links the repo to `~/.dotfiles`, stages new files (Nix only sees
 files git knows about), refreshes `flake.lock` as your own user, then runs
-`sudo darwin-rebuild switch --impure` with `DOTFILES_USER` set to your account.
+`sudo darwin-rebuild switch --impure` with `DOTFILES_USER` set to your account
+and `DOTFILES_GPG_KEY` passed through.
 
 I commit only after a rebuild works, so the git history is a history of
 configs that actually ran.
@@ -537,15 +540,19 @@ pbcopy < ~/.ssh/id_ed25519.pub
 gpg --armor --export EA380CFFC7FBC723 | pbcopy
 ```
 
-Put the key id in `home.nix` so git signs with it:
+Export the key id so git signs with it, and rebuild:
 
-```nix
-programs.git.signing = {
-  key = "EA380CFFC7FBC723";
-  format = "openpgp";
-  signByDefault = true;
-};
+```sh
+export DOTFILES_GPG_KEY=EA380CFFC7FBC723
+./rebuild.sh
 ```
+
+Nothing to edit: `flake.nix` reads the variable and threads it into
+`programs.git.signing`. Put the `export` in a file zsh reads on login so it
+survives new shells — `~/.zshenv.local` or your password manager's shell hook,
+not `~/.zshrc`, which home-manager owns. On a machine whose keyring does not
+hold the secret key, leave it unset: signing is then off, and commits are
+unsigned rather than failing with *No secret key*.
 
 The email on the GPG key must match `settings.user.email`, or GitHub shows
 commits as *Unverified*.

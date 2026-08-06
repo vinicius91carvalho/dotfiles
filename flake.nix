@@ -28,9 +28,15 @@
           Run ./rebuild.sh, or set it yourself for a one-off command:
             DOTFILES_USER="$(id -un)" darwin-rebuild build --impure --flake .#mac
         '';
+
+      # The GPG key git signs commits and tags with, as a long key id. Unlike
+      # the username there is nothing sensible to derive this from, and a
+      # machine that does not hold the secret key cannot sign at all - so an
+      # unset DOTFILES_GPG_KEY means "do not sign here" rather than an error.
+      signingKey = builtins.getEnv "DOTFILES_GPG_KEY";
     in {
       darwinConfigurations."mac" = nix-darwin.lib.darwinSystem {
-        specialArgs = { inherit username; };
+        specialArgs = { inherit username signingKey; };
         modules = [
           ./configuration.nix
           nix-homebrew.darwinModules.nix-homebrew
@@ -41,7 +47,7 @@
             # Rename any pre-existing dotfile home-manager wants to own, rather
             # than failing activation.
             home-manager.backupFileExtension = "before-nix";
-            home-manager.extraSpecialArgs = { inherit username; };
+            home-manager.extraSpecialArgs = { inherit username signingKey; };
             home-manager.users.${username} = import ./home.nix;
           }
         ];

@@ -1,4 +1,4 @@
-{ pkgs, config, username, ... }:
+{ pkgs, config, username, signingKey, ... }:
 
 {
   home.username = username;
@@ -206,13 +206,19 @@
   programs.git = {
     enable = true;
 
-    # Sign every commit and tag with the GPG key below. The key id is the long
-    # form of the signing (sec) key; `signer` defaults to the gpg from
-    # programs.gpg.package, so it does not depend on gpg being on $PATH.
+    # Sign every commit and tag with $DOTFILES_GPG_KEY, the long form of the
+    # signing (sec) key. `signer` defaults to the gpg from programs.gpg.package,
+    # so it does not depend on gpg being on $PATH.
+    #
+    # Signing is only turned on when the variable is set. A machine without the
+    # secret key in its keyring cannot sign, and leaving signByDefault on there
+    # fails every `git commit` with "No secret key" instead of just producing
+    # unsigned commits. Export the id (`gpg --list-secret-keys --keyid-format=long`)
+    # before ./rebuild.sh on any machine that holds the key.
     signing = {
-      key = "EA380CFFC7FBC723";
+      key = if signingKey != "" then signingKey else null;
       format = "openpgp";
-      signByDefault = true;
+      signByDefault = signingKey != "";
     };
 
     settings = {
