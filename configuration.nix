@@ -73,6 +73,8 @@
       "claude" # Claude desktop app (distinct from the Claude Code CLI)
       "claude-code"
       "google-chrome"
+      "slack"
+      "tailscale-app"
       # Setapp is a subscription launcher: it installs and updates its own
       # apps into /Applications/Setapp, so Nix can only declare Setapp
       # itself. After signing in on a fresh machine, re-install from Setapp:
