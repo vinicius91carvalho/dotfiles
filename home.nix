@@ -39,6 +39,37 @@
     EDITOR = "nvim";
   };
 
+  ##########################################################################
+  # nova - internal platform CLI
+  #
+  # Deliberately NOT a Nix package. The console serves one unversioned URL per
+  # platform (.../install/nova-darwin-arm64), so a pinned fetchurl would break
+  # on every internal release and no rebuild would work off the tailnet. nova
+  # also updates itself in place, which a read-only store path cannot do, and
+  # its installer wires up far more than a binary: ~/.config/nova-cli, the
+  # nova-tray app and its LaunchAgent, and nova's MCP tools in
+  # ~/.claude/settings.json - the same file this config already leaves to
+  # Claude Code, for the same reason.
+  #
+  # Install and update it with the vendor one-liner, on the tailnet:
+  #   curl -fsSL https://platform-nova-cli-console.tail180518.ts.net/install | bash
+  #
+  # What Nix owns is the PATH. nova installs into ~/.local/bin and the
+  # installer appends an export to ~/.zshrc - a read-only store symlink, so
+  # that step only warns and gives up, leaving `nova` uncallable by name.
+  # sessionPath puts the directory on PATH declaratively instead.
+  #
+  # One thing to watch on the first install: the installer also runs
+  # `nova github credential-helper --install`, which rewrites the global git
+  # config. ~/.config/git/config is a store symlink, and a `git config` write
+  # replaces it with a regular file rather than writing through it - the same
+  # failure this repo hit with Claude Code's settings.json. The fix is to copy
+  # the helper it wrote into programs.git.settings below, delete the detached
+  # file, and switch again; after that the helper is declarative and the
+  # installer finds it already configured and leaves it alone.
+  ##########################################################################
+  home.sessionPath = [ "$HOME/.local/bin" ];
+
   programs.ripgrep = {
     enable = true;
     arguments = [
