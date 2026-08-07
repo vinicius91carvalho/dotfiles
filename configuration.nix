@@ -51,7 +51,8 @@
     brews = [
       "git"
       "zsh"
-
+      "awscli"
+      "docker"
       # herdr is a client/server tool: the `herdr` command talks to a
       # background server over a socket in ~/.config/herdr, and fails with
       # "server did not become ready" if it is not running.
