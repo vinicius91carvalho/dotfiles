@@ -330,6 +330,67 @@
   home.file.".claude/CLAUDE.md".source =
     config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/AGENTS.md";
 
+  ##########################################################################
+  # TurboFieldfare - local Gemma 4 26B server, OpenAI-compatible
+  #
+  # Deliberately NOT a Nix package, for the same reason as nova above.
+  # Upstream ships source only - every release including 0.4 says "This is a
+  # source-only release. It does not include model weights or application
+  # binaries" - so a derivation would have to run `swift build` against the
+  # macOS 26 SDK and the Metal 4 toolchain inside Nix's sandbox, which the
+  # darwin stdenv does not provide. The model is worse: TurboFieldfareRepack
+  # streams ~15 GB of byte ranges from a pinned Hugging Face revision, which
+  # is neither reproducible nor something to keep in the store.
+  #
+  # Bootstrap once, by hand (see README.md):
+  #   git clone https://github.com/drumih/turbo-fieldfare.git \
+  #     ~/.local/share/turbo-fieldfare
+  #   cd ~/.local/share/turbo-fieldfare
+  #   swift build -c release --product TurboFieldfareServer
+  #   swift run -c release TurboFieldfareRepack \
+  #     --output scratch/gemma4.gturbo --overwrite
+  #
+  # What Nix owns is the process: its flags, its lifecycle and its logs. That
+  # is the part worth having identical on every machine, and the part that is
+  # easy to get subtly wrong by hand (binding beyond loopback, or forgetting
+  # --max-context and silently getting a smaller window than the client
+  # assumes).
+  #
+  # The wrapper exits 0 when the bootstrap has not been done. Paired with
+  # KeepAlive.SuccessfulExit = false, that means "missing build -> stay quiet",
+  # while a real crash of a running server still gets restarted. Without it,
+  # launchd would respawn a nonexistent binary forever on a fresh machine.
+  ##########################################################################
+  launchd.agents.turbo-fieldfare = {
+    enable = true;
+    config = {
+      ProgramArguments = [
+        "${pkgs.writeShellScript "turbo-fieldfare-server" ''
+          root="$HOME/.local/share/turbo-fieldfare"
+          bin="$root/.build/release/TurboFieldfareServer"
+          model="$root/scratch/gemma4.gturbo"
+
+          if [ ! -x "$bin" ] || [ ! -e "$model" ]; then
+            echo "turbo-fieldfare is not bootstrapped ($bin / $model missing);" \
+                 "see dotfiles/README.md. Not starting."
+            exit 0
+          fi
+
+          # --port and --max-context must match AI_BASE_URL / AI_MAX_CONTEXT in
+          # PayCore Academy's .env.local. The server binds 127.0.0.1 with no
+          # auth or TLS, so it must never be put behind a proxy or tunnel.
+          exec "$bin" --model "$model" --port 8080 --max-context 16384
+        ''}"
+      ];
+      RunAtLoad = true;
+      KeepAlive = { SuccessfulExit = false; };
+      # A crash loop against a 15 GB model would otherwise thrash the disk.
+      ThrottleInterval = 30;
+      StandardOutPath = "${config.home.homeDirectory}/Library/Logs/turbo-fieldfare.log";
+      StandardErrorPath = "${config.home.homeDirectory}/Library/Logs/turbo-fieldfare.log";
+    };
+  };
+
 }
 
 

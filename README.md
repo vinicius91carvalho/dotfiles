@@ -453,6 +453,44 @@ cannot leak it by accident.
 
 ---
 
+## TurboFieldfare
+
+[TurboFieldfare](https://github.com/drumih/turbo-fieldfare) runs Gemma 4 26B-A4B
+in about 2 GB of RAM and exposes an OpenAI-compatible Chat Completions API on
+`http://127.0.0.1:8080/v1`. PayCore Academy uses it for grading and tutoring.
+
+Nix owns the **process** — a `launchd` agent in `home.nix` with its flags, its
+restart policy and its log at `~/Library/Logs/turbo-fieldfare.log`. Nix does
+*not* own the build: upstream ships source only, so a derivation would have to
+run `swift build` against the macOS 26 SDK and the Metal 4 toolchain inside the
+sandbox, and the model is a ~15 GB stream from a pinned Hugging Face revision.
+Same call as nova, for the same reasons.
+
+Bootstrap it once per machine:
+
+```bash
+git clone https://github.com/drumih/turbo-fieldfare.git ~/.local/share/turbo-fieldfare
+cd ~/.local/share/turbo-fieldfare
+swift build -c release --product TurboFieldfareServer
+swift run -c release TurboFieldfareRepack --output scratch/gemma4.gturbo --overwrite
+```
+
+The repack downloads roughly 15 GB and installs about 14.3 GB. Until both the
+binary and `scratch/gemma4.gturbo` exist, the launchd agent logs one line and
+exits cleanly rather than crash-looping, so a fresh machine is quiet.
+
+Then start it without waiting for a logout:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/org.nix-community.home.turbo-fieldfare
+curl -s http://127.0.0.1:8080/v1/models
+```
+
+Requires macOS 26+, Metal 4 and Apple Silicon. It binds loopback with no auth
+and no TLS — never put it behind a proxy or a tunnel.
+
+---
+
 ## SSH and GPG keys
 
 **No private keys are in this repo, and none should ever be.** Only the config
