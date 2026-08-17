@@ -1,0 +1,5 @@
+# build output from `darwin-rebuild build` / `nix build`
+result
+result-*
+
+.DS_Store
