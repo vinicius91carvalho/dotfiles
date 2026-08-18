@@ -68,55 +68,12 @@
       "git"
       "zsh"
       "awscli"
-      # The `docker` formula is the CLI only - it ships no engine, so on its
-      # own the socket never exists and every command fails with "cannot
-      # connect to the Docker daemon". colima below is what provides one.
-      "docker"
-      # `docker-compose`, the standalone v1-style binary, as opposed to the
-      # `docker compose` subcommand that ships as a CLI plugin. Both exist and
-      # they are not interchangeable: a Makefile written against the hyphenated
-      # name needs this formula to put that exact name on PATH. The caveat it
-      # prints about ~/.docker/config.json and cliPluginsExtraDirs is for the
-      # plugin form and can be ignored here.
-      "docker-compose"
-      # The Docker engine, as a Lima VM. Docker Desktop and OrbStack are the
-      # alternatives and both are paid for commercial use; colima is Apache-2.0
-      # and speaks to the same `docker` CLI above.
-      #
-      # start_service boots the VM at login, so `docker` works straight from a
-      # fresh boot the way it would under Docker Desktop. It is also the
-      # expensive half of this: the VM holds its memory for as long as it runs.
-      # Drop start_service and run `colima start` by hand to get that back.
-      #
-      # NEVER restart this one - not `brew services restart colima`, and not
-      # the restart_service that every other formula here uses. The plist runs
-      # `colima start -f`, but the VM itself is a separate limactl process
-      # tree that does NOT die with it. Restarting SIGTERMs the foreground
-      # process, leaves the VM orphaned, and the relaunch then exits
-      # "already running, ignoring" on a loop.
-      #
-      # What that leaves is a machine that looks fine and works for nothing:
-      # `colima status` says running, docker.sock exists, and every ssh port
-      # forward through it is dead - docker refuses connections, every
-      # published port closed, no error printed anywhere. A hand-run
-      # `colima start`/`colima delete` alongside the service lands in exactly
-      # the same state, for the same reason: two owners of one VM.
-      #
-      # Stop, force the orphan down, then start. This is the only sequence
-      # that recovers it, and the only one that safely applies a colima
-      # upgrade:
-      #
-      #   brew services stop colima && colima stop -f && brew services start colima
-      #
-      # After any VM restart the containers on it are stopped but intact.
-      {
-        name = "colima";
-        start_service = true;
-      }
-      # docker-buildx and uv were already installed by hand but declared
-      # nowhere, so `cleanup = "zap"` was about to uninstall both. buildx is
-      # the docker CLI's build plugin; uv installs and runs Python tools.
-      "docker-buildx"
+      # The `docker`, `docker-compose` and `docker-buildx` formulas are
+      # deliberately NOT here. Everything Docker comes from the docker-desktop
+      # cask below - one vendor, one version - and Homebrew's own copies would
+      # sit at /opt/homebrew/bin, which is earlier on PATH than the
+      # /usr/local/bin the cask links into, so they would shadow the engine's
+      # own CLI with a separately-versioned one.
       "uv"
       # Basic Memory — the MCP knowledge store behind ~/basic-memory. Not in
       # nixpkgs; upstream ships this tap. Notes are plain markdown in the
@@ -140,6 +97,25 @@
 
     casks = [
       "ghostty"
+      # Docker's own engine and CLI for macOS - the app, the VM it runs the
+      # daemon in, and the `docker` binary, buildx and compose that talk to it.
+      # It replaces colima, which provided the engine while the CLI came from a
+      # separate Homebrew formula.
+      #
+      # Docker Desktop is free only for personal use and small companies; a
+      # commercial machine needs a paid subscription. That is the price of the
+      # first-party build - colima and OrbStack are the alternatives.
+      #
+      # The app is not a `brew services` daemon: it starts from Login Items,
+      # which its own installer sets up on first launch, so open it once after
+      # a fresh install and accept the licence and the privileged-helper
+      # prompt. `docker` fails with "cannot connect to the Docker daemon"
+      # until it has run at least once.
+      #
+      # `auto_updates` on the cask means Docker updates itself in place and
+      # `brew upgrade` leaves it alone; the version here is whatever the app
+      # last pulled, not something flake.lock pins.
+      "docker-desktop"
       "claude" # Claude desktop app (distinct from the Claude Code CLI)
       "claude-code"
       "google-chrome"
