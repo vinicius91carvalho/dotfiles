@@ -76,6 +76,9 @@ and have those memories reference Basic Memory notes for the details.
 - Pick the project from the working directory. `~/github/<org>/<repo>` maps to the Basic
   Memory project named `<repo>`, stored in `~/basic-memory/<org>/<repo>`. If that project
   does not exist yet, create it at that path and carry on. Anywhere else, use `personal`.
+- Basic Memory is strictly local. Everything lives under `~/basic-memory`; there is no
+  cloud and no cloud credentials, by design. Create projects with `create_memory_project`
+  and a local path, never a `workspace` parameter, and never suggest `bm cloud login`.
 
 ## Git and generated files
 
