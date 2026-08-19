@@ -39,6 +39,12 @@
     EDITOR = "nvim";
   };
 
+  # `go install` and every Go tool installer (a project Makefile fetching a
+  # release tarball into `$(go env GOPATH)/bin`, for instance) write here, and
+  # nothing else puts it on PATH. See the mise block below for why this is the
+  # one Go bin directory rather than one of two.
+  home.sessionPath = [ "$HOME/go/bin" ];
+
   programs.ripgrep = {
     enable = true;
     arguments = [
@@ -105,6 +111,19 @@
     enable = true;
     enableZshIntegration = true; # replaces the `mise activate zsh` line in .zshrc
     globalConfig = {
+      settings = {
+        # mise otherwise points GOBIN at the *versioned* toolchain directory
+        # (~/.local/share/mise/installs/go/<version>/bin) and puts that on PATH.
+        # Two things go wrong with that. `go = "latest"` above means the version
+        # moves, and every binary installed under the old one silently drops off
+        # PATH — an upgrade uninstalls your tools. And anything that installs to
+        # the conventional `go env GOPATH`/bin instead lands somewhere PATH never
+        # looked, which is how `make gosec` reported the binary as missing while
+        # it sat in ~/go/bin. Off, GOBIN is unset and Go falls back to
+        # $GOPATH/bin, so there is one stable location and home.sessionPath above
+        # covers it.
+        go.set_gobin = false;
+      };
       tools = {
         node = "latest";
         bun = "latest";
