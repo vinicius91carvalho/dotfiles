@@ -34,6 +34,32 @@
 - State the root cause in one or two sentences alongside the fix.
 - If you are treating a symptom rather than the cause, say so explicitly.
 
+## Expected behaviour, measured
+
+- Reproducing a bug proves something is broken. This proves something is right.
+  Both are required, and the second one is the half that usually gets skipped.
+- Before tuning anything whose output is a judgement - a score, a ranking, a
+  match, a classification, an answer from a model - write down what the correct
+  output is first. You decide it, by reading the real data yourself. Never infer
+  it from what the system currently produces; that is how a wrong answer becomes
+  the baseline.
+- Turn that decision into a fixture: a labelled set that represents the expected
+  result, versioned with the code, with a one-line reason per row. It is the
+  contract. The reasons are what let someone disagree with you later, and what
+  become the examples when the system keeps getting a case wrong.
+- Then adjust the system until it reaches that result, measuring every time. One
+  change, one measurement. "It looks better" is not a measurement, and a
+  parameter moved in the dark fixes one symptom and creates the next.
+- Report both directions of error: what it produced that I would not have, and
+  what it discarded that I would have kept. They cost differently and usually
+  only one of them is visible.
+- Build the loop offline and local first. A local run measures in seconds and
+  can be adjusted a dozen times in an hour; the same loop against staging or
+  production costs a day per turn. Go to staging or production to confirm what
+  the local measurement already showed, not to discover it.
+- When a cheap model does the judging, the fixture is also how you decide whether
+  a better one is worth paying for. Compare accuracy and cost on the same ruler.
+
 ## UI and frontend
 
 - Verify visually. Screenshot and look at it rather than assuming the code implies the render.
