@@ -106,6 +106,17 @@ and have those memories reference Basic Memory notes for the details.
   cloud and no cloud credentials, by design. Create projects with `create_memory_project`
   and a local path, never a `workspace` parameter, and never suggest `bm cloud login`.
 
+### Plans
+
+- Every plan lives in Basic Memory, in the `plans/` folder of the matching project. The Claude
+  Code plan file (`~/.claude/plans/*.md`) is a session scratchpad: when planning ends, save the
+  plan as a note (`write_note`) and keep the two in sync.
+- At the start of a session, read plans from there before acting: `search_notes` over `plans/`
+  (or `recent_activity`) and resume whatever is open. Never restart from scratch work that
+  already has a plan on record.
+- As the plan advances, update the SAME note with `edit_note`: what got done, what changed in
+  the decisions, what is left. A finished plan is marked as finished, never deleted.
+
 ## Git and generated files
 
 - Never add yourself as co-author or put your agent name in a commit message.
