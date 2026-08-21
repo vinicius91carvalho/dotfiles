@@ -64,7 +64,6 @@ Every time after that, just:
 - Sign in to the **App Store** (before step 6, ideally) so WhatsApp and Kindle
   install.
 - Sign in to **Setapp**, then reinstall its apps from the Setapp client.
-- Install **Claude Code**: `curl -fsSL https://claude.ai/install.sh | bash`
 - Wire up **Basic Memory** — register the MCP server, create the projects, open
   the vault in Obsidian. See [Basic Memory](#basic-memory).
 - Create your **SSH and GPG keys** — see [SSH and GPG keys](#ssh-and-gpg-keys).
@@ -684,7 +683,7 @@ the private half ever leaks.
 
 | Thing | Why |
 | --- | --- |
-| Claude Code | Self-updating native installer; Nix would keep reverting it |
+| Claude Code's own version | The `claude-code@latest` cask tracks upstream's `latest` channel, so `./rebuild.sh` upgrades it; the binary is Nix-declared, its release is not |
 | Setapp's apps | Setapp installs and updates its own catalogue |
 | Node / Bun / Go | `mise` handles per-project versions; Nix installs mise |
 | Nix itself | Determinate owns the daemon |

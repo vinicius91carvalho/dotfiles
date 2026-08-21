@@ -14,13 +14,28 @@
 
   users.users.${username}.home = "/Users/${username}";
 
-  # Claude Code comes from the `claude-code` cask declared below, not from its
-  # native installer. Only ever use one: the native installer puts a `claude`
-  # in ~/.local/bin that shadows the cask's, and the two then update on
-  # separate schedules and drift apart.
+  # Claude Code comes from the `claude-code@latest` cask declared below, not
+  # from its native installer. Only ever use one: the native installer puts a
+  # `claude` in ~/.local/bin that shadows the cask's, and the two then update
+  # on separate schedules and drift apart.
+  #
+  # `@latest`, not the plain `claude-code` cask, on purpose. Upstream publishes
+  # two release channels and there is one cask per channel: `claude-code`
+  # follows `stable`, which trails the current release by a week or more (it
+  # sat on 2.1.228 while 2.1.238 was out), and `claude-code@latest` follows
+  # `latest`. They declare `conflicts_with` each other, so exactly one can be
+  # installed. New features and fixes are the point of this tool, so track
+  # `latest` and take the occasional rough release.
   #
   # Settings and history live in ~/.claude and ~/.claude.json, which are
   # independent of how the binary was installed and survive switching.
+  #
+  # Swapping between the two casks by hand needs care: their `zap` stanza
+  # trashes ~/.claude.json* (project history, MCP servers, onboarding state),
+  # and `onActivation.cleanup = "zap"` below means dropping a cask from this
+  # list is a zap, not a plain uninstall. Back that file up, `brew uninstall
+  # --cask` the old one WITHOUT `--zap`, install the new one, then rebuild —
+  # so activation finds the desired state already in place and zaps nothing.
 
   ############################################################################
   # Homebrew. nix-homebrew installs and owns the Homebrew prefix itself;
@@ -117,7 +132,7 @@
       # last pulled, not something flake.lock pins.
       "docker-desktop"
       "claude" # Claude desktop app (distinct from the Claude Code CLI)
-      "claude-code"
+      "claude-code@latest" # see the Claude Code note at the top of this file
       "google-chrome"
       "visual-studio-code"
       "dbeaver-community"
