@@ -292,8 +292,6 @@
   # the plugin versions.
   xdg.configFile."nvim".source =
     config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/.config/nvim";
-  xdg.configFile."herdr".source =
-    config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/.config/herdr";
   ##########################################################################
   # Claude Code
   #

@@ -72,9 +72,24 @@
     #
     # basicmachines-co/basic-memory is upstream's tap for basic-memory, which is
     # not in nixpkgs.
+    #
+    # can1357/tap is upstream's tap for omp (Oh My Pi), which is not in nixpkgs
+    # either.
+    #
+    # stablyai/orca is upstream's tap for the Orca cask. It has to be a tap:
+    # homebrew-cask already owns the name `orca` for an unrelated, deprecated
+    # plotly tool, so the cask below is written tap-qualified.
     taps = [
       {
         name = "basicmachines-co/basic-memory";
+        trusted = true;
+      }
+      {
+        name = "can1357/tap";
+        trusted = true;
+      }
+      {
+        name = "stablyai/orca";
         trusted = true;
       }
     ];
@@ -94,18 +109,22 @@
       # nixpkgs; upstream ships this tap. Notes are plain markdown in the
       # vault, its index and project list live in ~/.basic-memory.
       "basic-memory"
-      # herdr is a client/server tool: the `herdr` command talks to a
-      # background server over a socket in ~/.config/herdr, and fails with
-      # "server did not become ready" if it is not running.
+      # omp (Oh My Pi) — a terminal coding agent, and one of the CLIs Orca can
+      # drive. Orca finds an agent by looking for its binary name on PATH, so
+      # installing `omp` here is the whole integration: it then shows up in
+      # Orca's agent picker with the auto-setup, hooks and status line Orca
+      # already ships for it.
       #
-      # start_service registers it to launch at login and starts it now;
-      # restart_service = "changed" restarts it after an upgrade so the
-      # running server matches the installed binary.
-      {
-        name = "herdr";
-        start_service = true;
-        restart_service = "changed";
-      }
+      # From upstream's tap because it is not in nixpkgs. The formula downloads
+      # the published `omp-darwin-arm64` release binary rather than building
+      # anything, so `onActivation.upgrade` moves it to the current release on
+      # every rebuild.
+      #
+      # Its own config lives in ~/.omp (model roles in agent/config.yml,
+      # providers in agent/models.yml) and is not managed here — omp writes it
+      # itself, and on first run in a repo it imports the rules and skills
+      # already in ~/.claude.
+      "omp"
       # neovim intentionally not here — it comes from Nix via home.nix, so its
       # version is pinned by flake.lock rather than tracking Homebrew.
     ];
@@ -133,6 +152,19 @@
       "docker-desktop"
       "claude" # Claude desktop app (distinct from the Claude Code CLI)
       "claude-code@latest" # see the Claude Code note at the top of this file
+      # Orca - a desktop app for running several coding agents side by side,
+      # each in its own git worktree. It replaces herdr, which did the same
+      # job from the terminal as a client/server pair.
+      #
+      # Tap-qualified because homebrew-cask has a different, deprecated
+      # `orca`; the bare name would install that one instead.
+      #
+      # The cask is `auto_updates true`: Orca swaps its own app bundle in
+      # place, so `brew upgrade` leaves it alone and the installed version is
+      # whatever the app last pulled, not something flake.lock pins. It also
+      # links a small `orca` CLI onto PATH, and keeps its worktrees and agent
+      # state in ~/.orca.
+      "stablyai/orca/orca"
       "google-chrome"
       "visual-studio-code"
       "dbeaver-community"

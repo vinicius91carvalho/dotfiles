@@ -181,7 +181,7 @@ grep -rn "vinicius91carvalho" --include="*.nix" .
 | `configuration.nix` | System: Homebrew apps, dock, finder, trackpad, locale |
 | `keyboard-shortcuts.nix` | macOS keyboard shortcuts |
 | `home.nix` | User: shell, git, ghostty, neovim, CLI tools, fonts, ssh |
-| `.config/` | Config directories, mirroring `~/.config` (nvim, herdr) |
+| `.config/` | Config directories, mirroring `~/.config` (nvim) |
 | `rebuild.sh` | Applies everything |
 
 How the pieces relate:
@@ -378,7 +378,6 @@ something lands:
 | In this repo | Ends up at |
 | --- | --- |
 | `.config/nvim/` | `~/.config/nvim` |
-| `.config/herdr/` | `~/.config/herdr` |
 | `.claude/` | `~/.claude` |
 
 New config goes in the same place it would live at home — no translation,
@@ -439,18 +438,61 @@ Without it the build fails with
 
 ---
 
-## herdr
+## Orca
 
-[herdr](https://herdr.dev) is a client/server terminal multiplexer. The
-formula is declared with `start_service = true`, so the background server is
-registered at login — without it the client fails with *"server did not become
-ready"*.
+[Orca](https://onorca.dev) runs several coding agents side by side, each in its
+own git worktree, from one desktop app. It took over from herdr, which did the
+same job in the terminal as a client/server pair.
 
-Its directory is linked out-of-store like Neovim's, because herdr writes
-runtime state (sockets, logs, `session.json`) alongside `config.toml`. Since
-this repo is public, `.config/herdr/.gitignore` denies everything by default
-and opts `config.toml` back in, so a future release writing new state there
-cannot leak it by accident.
+It comes from upstream's own tap, and the cask is written tap-qualified as
+`stablyai/orca/orca`: homebrew-cask already has a different, deprecated `orca`,
+so the bare name would install the wrong thing.
+
+Nothing about it is declared here beyond the cask. Orca updates itself in place
+(`auto_updates true`), so `brew upgrade` leaves it alone and the installed
+version is whatever the app last pulled, not something `flake.lock` pins - the
+same call this repo makes for Docker Desktop. Its worktrees and agent state live
+in `~/.orca`, which it manages itself.
+
+### The agents it runs
+
+Orca finds an agent by looking for that agent's binary name on `PATH` - its
+catalogue maps `omp` to OMP, `claude` to Claude Code, and so on. So an agent
+gets "integrated" with Orca simply by being installed. Two are declared in
+`configuration.nix`:
+
+| Agent | Comes from | Binary |
+| --- | --- | --- |
+| Claude Code | `claude-code@latest` cask | `claude` |
+| [OMP](https://omp.sh) | `can1357/tap` formula `omp` | `omp` |
+
+---
+
+## OMP
+
+[OMP (Oh My Pi)](https://omp.sh) is a terminal coding agent with an LSP and a
+real debugger wired in. It is the second agent Orca can drive here, next to
+Claude Code.
+
+Homebrew, from upstream's tap, because it is not in nixpkgs. The formula only
+downloads the published `omp-darwin-arm64` release binary - nothing is built -
+so `onActivation.upgrade` moves it to the current release on every rebuild.
+
+Its config lives in `~/.omp` and is **not** managed here: model roles in
+`agent/config.yml`, extra providers in `agent/models.yml`, both written by omp
+itself. On the first run in a repo it imports the rules and skills already in
+`~/.claude`, so `AGENTS.md` applies to it without any extra wiring.
+
+One thing is per-machine and manual, because it is an account, not a config
+file: **omp ships with no credentials.** Run `omp` once and use `/login` to add
+an account, or `omp auth-broker login <provider>` from a shell - `omp
+auth-broker list` prints the providers. Check what is stored with:
+
+```sh
+omp usage
+```
+
+Until then it will sit on its splash screen, in Orca or out of it.
 
 ---
 
@@ -684,6 +726,7 @@ the private half ever leaks.
 | Thing | Why |
 | --- | --- |
 | Claude Code's own version | The `claude-code@latest` cask tracks upstream's `latest` channel, so `./rebuild.sh` upgrades it; the binary is Nix-declared, its release is not |
+| OMP's version and its `~/.omp` config | The tap formula tracks upstream's latest release, so `./rebuild.sh` upgrades it; omp writes its own config, and its logins are account credentials |
 | Setapp's apps | Setapp installs and updates its own catalogue |
 | Node / Bun / Go | `mise` handles per-project versions; Nix installs mise |
 | Nix itself | Determinate owns the daemon |
