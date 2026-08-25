@@ -615,6 +615,22 @@ is what B0 measured. MTP is what beats it, by verifying several drafted tokens
 per weight read — 88% of drafts accepted here, and no quality cost, since
 drafts are rejection-verified.
 
+The Apple Neural Engine is deliberately **off**, and that is a measured call,
+not a default left alone. Its prefill programs are compiled eagerly and stay
+resident: the documented 64-MLP + 48-GDN layout took the model from 18.76 GB to
+28.56 GB, past the guard ceiling, after which the server refused every prompt
+including a 69-token one. The 16-layer subset that does fit (+1.15 GB) came out
+*slower* where it should have helped - a 12.6k-token prefill went 137 → 129
+tok/s - while swap went from 380 MB to 2.2 GB. Upstream's +13%/+57% figures put
+all 64 layers on the ANE, which needs more than 36 GB. Worth revisiting on a
+bigger machine, not here.
+
+The expensive prefill has a root cause worth knowing: `head_dim = 256`, which
+MLX's fused SDPA kernel does not cover (64, 80 and 128 only), so the unfused
+path would materialise the whole score matrix - O(L²). oMLX's `sdpa256` patch
+already routes around that on its own; forcing it with `OMLX_SDPA256_TILED=1`
+changed nothing measurable.
+
 Quality was checked against a hand-written fixture of 12 tasks taken from the
 two repos this serves (`~/tools/qwen3.8-27b/eval/`): **12/12, images 4/4**.
 
