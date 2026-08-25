@@ -34,6 +34,15 @@
       # machine that does not hold the secret key cannot sign at all - so an
       # unset DOTFILES_GPG_KEY means "do not sign here" rather than an error.
       signingKey = builtins.getEnv "DOTFILES_GPG_KEY";
+
+      # The machine's unified memory in GB, used to gate ./local-llm.nix: a
+      # 17.4 GB model plus its KV cache only makes sense above 32 GB. rebuild.sh
+      # computes it from `sysctl -n hw.memsize` and hands it over like the two
+      # variables above. Unset means 0 means "no local LLM here", which is the
+      # right answer on a machine this config has never seen.
+      memGb =
+        let fromEnv = builtins.getEnv "DOTFILES_MEM_GB";
+        in if fromEnv != "" then nixpkgs.lib.toInt fromEnv else 0;
     in {
       darwinConfigurations."mac" = nix-darwin.lib.darwinSystem {
         specialArgs = { inherit username signingKey; };
@@ -47,7 +56,7 @@
             # Rename any pre-existing dotfile home-manager wants to own, rather
             # than failing activation.
             home-manager.backupFileExtension = "before-nix";
-            home-manager.extraSpecialArgs = { inherit username signingKey; };
+            home-manager.extraSpecialArgs = { inherit username signingKey memGb; };
             home-manager.users.${username} = import ./home.nix;
           }
         ]

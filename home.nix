@@ -1,6 +1,11 @@
 { pkgs, config, username, signingKey, ... }:
 
 {
+  # The local LLM server. Its own file because everything in it is gated on the
+  # machine having more than 32 GB of memory, and that gate is easier to trust
+  # when it wraps a whole file than when it is sprinkled through this one.
+  imports = [ ./local-llm.nix ];
+
   home.username = username;
   home.homeDirectory = "/Users/${username}";
 

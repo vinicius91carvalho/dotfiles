@@ -534,6 +534,96 @@ and no TLS — never put it behind a proxy or a tunnel.
 
 ---
 
+## oMLX and Qwen3.8-27B
+
+[oMLX](https://github.com/jundot/omlx) serves
+[Qwen3.8-27B](https://huggingface.co/True2456/Qwen3.8-27B-AWQ-5.0bpw) on
+`http://127.0.0.1:1337`, speaking both the OpenAI (`/v1/chat/completions`) and
+the Anthropic (`/v1/messages`) protocols, with an admin dashboard and a chat UI
+at `/admin`. The model reads images as well as text.
+
+Only on machines with **more than 32 GB** of unified memory. The weights are
+17.4 GB and the KV cache grows on top of them; below that the server swaps from
+the first prompt. The gate lives in `local-llm.nix`, which is a no-op on a
+smaller Mac. `rebuild.sh` measures the memory and hands it to the flake as
+`DOTFILES_MEM_GB`, the same way it hands over the username and the GPG key.
+
+Nix owns the **process** — the launchd agent, its flags, and its log at
+`~/Library/Logs/omlx.log`. Nix does *not* own the app or the weights, and that
+is deliberate:
+
+- Upstream ships a notarized `.dmg` whose ANE prefill kernels are already
+  compiled. The Homebrew formula only builds them under
+  `--with-custom-kernel`, which compiles `.metal` sources, which needs the
+  Metal toolchain, which needs full Xcode — about 20 GB of build dependency to
+  arrive at binaries the DMG already carries.
+- `~/.omlx/settings.json` and `~/.omlx/model_settings.json` are written by oMLX
+  itself, so they are left to it, like `~/.omp` and `~/.claude/settings.json`.
+
+Bootstrap it once per machine — **and only on a machine with more than 32 GB**;
+below that `local-llm.nix` is a no-op and the download would be wasted:
+
+```bash
+# 0. Check first. 32 or less: stop here, nothing below applies.
+echo $(( $(sysctl -n hw.memsize) / 1073741824 ))GB
+
+# 1. The app (pick the DMG matching your macOS major version)
+open https://github.com/jundot/omlx/releases       # oMLX-<ver>-macos26-27.dmg
+spctl -a -vv -t install /Volumes/oMLX/oMLX.app     # expect: accepted, Notarized
+cp -R /Volumes/oMLX/oMLX.app /Applications/
+
+# 2. The weights (17.4 GB)
+uvx --from "huggingface_hub[cli]" hf download True2456/Qwen3.8-27B-AWQ-5.0bpw \
+  --local-dir ~/tools/qwen3.8-27b/True2456/Qwen3.8-27B-AWQ-5.0bpw
+```
+
+Until both exist the launchd agent logs one line and exits cleanly rather than
+crash-looping, so a fresh machine is quiet.
+
+Then start it without waiting for a logout:
+
+```bash
+launchctl kickstart -k gui/$(id -u)/org.nix-community.home.omlx
+curl -s http://127.0.0.1:1337/v1/models
+```
+
+The `5.0bpw` build and not the smaller `4.85bpw` one: the 4.85 build was
+calibrated on text only, and its own model card calls the vision tower's
+precision "a conservative guess rather than a measurement". 0.53 GB is a cheap
+price for a vision tower that was actually measured.
+
+Port 1337 because 8000 belongs to infoproduct's webapp and 8080 to
+TurboFieldfare. It binds loopback with no auth and no TLS — never put it behind
+a proxy or a tunnel.
+
+Two settings were arrived at by measurement, not by taste, and both live in
+`local-llm.nix` with the reasoning in a comment:
+
+| Setting | Measured effect on this M3 Max |
+| --- | --- |
+| `--memory-guard-gb 27` (was 24) | a 12.6k-token prompt: **23 min → 92 s** |
+| `mtp_enabled` (per-model) | generation: **17.2 → 32.2 tok/s** |
+
+The first one is the counter-intuitive one. The prefill working set is ~10 MB
+per token, so a 2048-token chunk wants 21 GB; a ceiling too low does not
+protect anything, because `prefill_priority = "context"` shrinks the chunk to
+its 32-token floor instead of refusing the prompt. 27 GB stays under Apple's
+own Metal cap for this Mac (28.1 GB).
+
+Generation is capped by memory bandwidth: 300 GB/s ÷ 17.4 GB ≈ 17 tok/s, which
+is what B0 measured. MTP is what beats it, by verifying several drafted tokens
+per weight read — 88% of drafts accepted here, and no quality cost, since
+drafts are rejection-verified.
+
+Quality was checked against a hand-written fixture of 12 tasks taken from the
+two repos this serves (`~/tools/qwen3.8-27b/eval/`): **12/12, images 4/4**.
+
+There is a plain-language guide to every knob in
+`~/Documents/qwen-local-guia.md`: quantization, KV cache, prefill vs decode,
+MTP, and what the Apple Neural Engine does and does not buy.
+
+---
+
 ## Basic Memory
 
 [Basic Memory](https://basicmemory.com) is the long-term knowledge store the AI
