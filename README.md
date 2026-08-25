@@ -580,10 +580,59 @@ uvx --from "huggingface_hub[cli]" hf download True2456/Qwen3.8-27B-AWQ-5.0bpw \
 Until both exist the launchd agent logs one line and exits cleanly rather than
 crash-looping, so a fresh machine is quiet.
 
+`local-llm.nix` also puts **`omlxctl`** on PATH — behind the same 32 GB gate, so
+it does not exist on a machine that cannot run the model:
+
+| Command | What it does |
+| --- | --- |
+| `omlxctl start` / `stop` / `restart` | `stop` uses `launchctl bootout`, never `kill`: `KeepAlive.SuccessfulExit = false` treats a SIGTERM as a crash and brings the server straight back |
+| `omlxctl status` | version, model served, resident memory, swap, stored backup |
+| `omlxctl logs` | follows `~/Library/Logs/omlx.log` |
+| `omlxctl update` | checks the published release and installs it |
+| `omlxctl rollback` | restores the previous `.app` |
+
+`./rebuild.sh` runs `omlxctl update` before it hands over to `darwin-rebuild`.
+oMLX ships as a DMG, outside both Nix and Homebrew, so nothing else would ever
+notice a new release. The update verifies Gatekeeper (`spctl -a -t install` must
+say *accepted*) before anything enters `/Applications`, keeps the previous
+`.app` for `rollback`, and exits quietly when already current. It follows
+whatever GitHub calls `latest`, **release candidates included** — hence the
+backup.
+
+### Performance, as measured on this Mac
+
+| Metric | Value |
+| --- | --- |
+| tg (generation) | **32.2 tok/s** |
+| pp (prefill) at 4k | **158 tok/s** |
+| pp (prefill) at 12.6k | **137 tok/s** |
+| pp with a cached prefix | 4,143 tok/s effective (12.6k in 3.0 s) |
+| Largest context accepted | 33.1k tokens, 24.7 GB peak |
+
+### Driving it from OMP
+
+`~/.omp/agent/models.yml` declares the provider and `config.yml` the roles and
+compaction. Neither is managed by Nix — omp rewrites both.
+
+The number that matters is `contextWindow: 30000`, **not** the `262144` the
+server advertises. oMLX does not truncate, does not compact and has no context
+shifting: past the window it returns `HTTP 400 "Prompt too long"`. Compaction is
+the agent's job and omp only compacts if it knows the real window.
+
+30000 and not less because omp's own floor is large: measured here, a one-line
+question inside `find-best-job` already sends 22.3k–23.2k tokens of system
+prompt, tool definitions and instruction files. It stays workable because that
+floor is a stable prefix the SSD cache serves — `re-prefills 8892 of 23228
+tokens`, turns of 20-26 s instead of the 139 s first cold run.
+
+Roles carry a thinking level (`plan:xhigh`, `default:medium`, `smol:low`,
+`commit:low`). The template accepts only `low`, `medium` and `xhigh`; oMLX
+remaps the rest, so `off` does not disable thinking.
+
 Then start it without waiting for a logout:
 
 ```bash
-launchctl kickstart -k gui/$(id -u)/org.nix-community.home.omlx
+omlxctl start
 curl -s http://127.0.0.1:1337/v1/models
 ```
 

@@ -16,6 +16,15 @@ DOTFILES_GPG_KEY="${DOTFILES_GPG_KEY:-}"
 # so it is measured here and handed to the flake like the two variables above.
 DOTFILES_MEM_GB="${DOTFILES_MEM_GB:-$(( $(sysctl -n hw.memsize) / 1073741824 ))}"
 
+# oMLX ships as a DMG, outside Nix and outside Homebrew, so nothing else would
+# ever notice a new release. omlxctl checks and installs one, keeping the
+# previous .app for `omlxctl rollback`. It exits quietly when already current.
+#
+# `command -v` first: omlxctl is declared in local-llm.nix, so on a fresh
+# machine - or any machine with 32 GB or less - it does not exist yet. And `||
+# true` because a GitHub outage must never be the reason a rebuild fails.
+command -v omlxctl >/dev/null 2>&1 && omlxctl update || true
+
 # Nix only sees files that git tracks, so a brand new .nix file is invisible
 # until it is at least staged.
 git -C "$DIR" add -AN . >/dev/null 2>&1 || true
