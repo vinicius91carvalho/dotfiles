@@ -3,3 +3,7 @@ result
 result-*
 
 .DS_Store
+
+# herdr left this behind: runtime logs, sockets and session state from a
+# tool this config no longer declares (Orca replaced it). Never repo content.
+.config/herdr/
