@@ -71,6 +71,7 @@ Plans:
 - Make the bug happen first, the way I would see it: seed the data, open the real app in Chrome or Playwright, watch it break. A bug you never saw break is a guess.
 - Fix it, run the same thing again, watch it pass. Say "I saw it fail, I changed X, I saw it pass". Never "this should work".
 - Leave a test behind. Check that the test fails without your fix. A test that passes both ways proves nothing.
+- A test proves the RIGHT answer, decided from real data first. A fixture value must come from a real producer, never invented. A test that matches today's wrong behaviour is a bug wearing a green badge.
 - UI: look at a screenshot, do not assume the code renders the way you think. Bad spacing, wrong state and broken mobile views are bugs. Fix them.
 - Be honest. Only proved by a unit test? Say that. Could not reproduce it? Say that. Never call an unproven fix "fixed".
 
@@ -103,4 +104,4 @@ For anything that produces a score, a ranking, a match, or an answer from a mode
 ## Subagents
 
 - Only for big work that really splits into parallel parts. One beats three.
-- Never use one to double-check your own work.
+- Never use one to double-check your own work. A review in a FRESH context (a forked agent that never watched you write the code) is different - that is not your own work checking itself, and for critical changes it is required.
