@@ -13,6 +13,12 @@
 - No filler, no boilerplate, no long warnings, no "great question".
 - Never use the em dash. Use a plain dash "-".
 
+## What you write for other people (Linear tasks, documents)
+
+- Simple human-readable words. Anyone on the team must understand it, not just engineers.
+- Every Linear task opens with a TLDR: 2-3 lines, what and why. A reader who stops there already gets it.
+- Useless information and analysis is noise. If a detail does not change what the reader does next, cut it.
+
 ## You act. You never ask me to do it.
 
 - If something is broken, fix it. Never ask "do you want me to fix this?".
