@@ -1,10 +1,19 @@
 { pkgs, config, username, signingKey, ... }:
 
 {
-  # The local LLM server. Its own file because everything in it is gated on the
-  # machine having more than 32 GB of memory, and that gate is easier to trust
-  # when it wraps a whole file than when it is sprinkled through this one.
-  imports = [ ./local-llm.nix ];
+  imports = [
+    # The local LLM server. Its own file because everything in it is gated on
+    # the machine having more than 32 GB of memory, and that gate is easier to
+    # trust when it wraps a whole file than when it is sprinkled through this
+    # one.
+    ./local-llm.nix
+
+    # Codex, and the MCP servers both it and Claude Code use. Its own file
+    # because it is one subject - agent parity - spread over three mechanisms
+    # (config.toml, an instructions link and two activation scripts), and that
+    # reads better together than scattered through this file.
+    ./codex.nix
+  ];
 
   home.username = username;
   home.homeDirectory = "/Users/${username}";
@@ -320,6 +329,10 @@
   #
   # ./.claude/settings.json stays in the repo as the seed to copy onto a new
   # machine, but ~/.claude/settings.json belongs to Claude Code.
+  #
+  # ~/.claude.json - the MCP servers, and project history beside them - is the
+  # same story, and ./codex.nix merges the declared servers into it instead of
+  # linking it, for the same reason.
   ##########################################################################
   home.file.".claude/CLAUDE.md".source =
     config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/AGENTS.md";

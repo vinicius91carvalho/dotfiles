@@ -152,6 +152,19 @@
       "docker-desktop"
       "claude" # Claude desktop app (distinct from the Claude Code CLI)
       "claude-code@latest" # see the Claude Code note at the top of this file
+      # Codex desktop app - the GUI over the same agent as the codex CLI. It
+      # reads $CODEX_HOME, so codex.nix's MCP servers and skills are already
+      # its own; there is nothing to configure per client.
+      #
+      # Homebrew marks this cask deprecated, "discontinued", and points at the
+      # `chatgpt` cask instead. That looks stale rather than true: upstream
+      # rebuilt Codex.dmg the same day this line was written, and the codex
+      # CLI still installs the app from it. The cask is kept because it is the
+      # only declarative way to get the app onto a fresh machine, and because
+      # `auto_updates true` means the app then updates itself past whatever
+      # version the cask pins. If Homebrew ever disables it, `codex app`
+      # downloads and installs the same bundle by hand.
+      "codex-app"
       # Orca - a desktop app for running several coding agents side by side,
       # each in its own git worktree. It replaces herdr, which did the same
       # job from the terminal as a client/server pair.

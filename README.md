@@ -181,6 +181,8 @@ grep -rn "vinicius91carvalho" --include="*.nix" .
 | `configuration.nix` | System: Homebrew apps, dock, finder, trackpad, locale |
 | `keyboard-shortcuts.nix` | macOS keyboard shortcuts |
 | `home.nix` | User: shell, git, ghostty, neovim, CLI tools, fonts, ssh |
+| `codex.nix` | Codex, and the MCP servers both it and Claude Code use |
+| `local-llm.nix` | The local LLM server, on machines with more than 32 GB |
 | `.config/` | Config directories, mirroring `~/.config` (nvim) |
 | `rebuild.sh` | Applies everything |
 
@@ -193,6 +195,8 @@ rebuild.sh → darwin-rebuild switch --impure --flake ~/.dotfiles#mac
                      │     └── keyboard-shortcuts.nix
                      ├── nix-homebrew       → owns the Homebrew install
                      └── home-manager       → home.nix, my dotfiles
+                           ├── codex.nix    → the coding agents
+                           └── local-llm.nix
 ```
 
 `mac` is a config name, not a hostname, so this works on any Mac.
@@ -689,6 +693,81 @@ MTP, and what the Apple Neural Engine does and does not buy.
 
 ---
 
+## Coding agents
+
+Two agents run on this machine - [Claude Code](https://claude.com/claude-code)
+and [Codex](https://developers.openai.com/codex/cli) - and the point of
+`codex.nix` is that they behave the same. One set of instructions, one list of
+MCP servers, one set of skills. Which one I open should not change the answer I
+get.
+
+| The shared thing | Claude Code | Codex | Claude desktop app |
+| --- | --- | --- | --- |
+| Instructions | `~/.claude/CLAUDE.md` | `~/.codex/AGENTS.md` | from the account |
+| MCP servers | `~/.claude.json` | `~/.codex/config.toml` | `claude_desktop_config.json` |
+| Skills | `~/.claude/skills/` | `~/.codex/skills/` | from the account |
+
+The desktop app is half in and half out. Its MCP servers are managed here, and
+its *local agent* sessions are Claude Code, so they read `~/.claude/skills` and
+`AGENTS.md` like the CLI does. Its ordinary chat is not local at all: the
+instructions and skills there belong to the claude.ai account, which syncs them
+down into `~/Library/Application Support/Claude/` on its own. Nothing in this
+repo can put a skill there.
+
+Both instruction files are symlinks to this repo's `AGENTS.md`, so there is one
+file to edit and no rebuild needed to change it.
+
+The MCP servers are declared once, in `programs.mcp.servers`. home-manager
+writes the neutral list to `~/.config/mcp/mcp.json`, and Codex's module
+translates it into `[mcp_servers.*]` in `config.toml`. The two Claude clients
+cannot be given them the same way, because each keeps its servers in a file it
+also writes itself - `~/.claude.json` for Claude Code, which also holds project
+history and trust decisions, and `claude_desktop_config.json` for the desktop
+app, which also holds its app preferences. So an activation script merges the
+declared servers into both and leaves everything else in them alone. Nix owns
+the content, each app keeps its file. The declared side wins on a name
+collision, which is what makes this repo the source of truth. The desktop app
+only sees the change after a restart; Claude Code sees it in the next session.
+
+Server commands are written as absolute paths for the desktop app's sake. A
+GUI app is launched by launchd, not by a login shell, so the PATH it hands an
+MCP server is whatever the app chooses to build - and when a bare name does not
+resolve there, the only symptom is a server showing as failed.
+
+Skills work the other way round. Claude Code gets one symlink for the whole
+skills directory; Codex gets one symlink per skill, because it follows a linked
+skill *directory* but not a linked `SKILL.md` inside one, and because leaving
+`~/.codex/skills` a real directory is what lets the skills that arrive as a
+Claude Code *plugin* be linked in beside them. Codex has no plugin system, but a
+plugin's skills are plain `SKILL.md` directories, so a second activation script
+links them out of `~/.claude/plugins/cache/` - a path whose version component
+moves on every plugin update, which is why it is a script and not a `home.file`
+entry. It only removes links it made itself, and never overwrites a
+Nix-managed name.
+
+**The Codex desktop app needs no configuration of its own.** It is the same
+agent behind a GUI, it reads the same `$CODEX_HOME`, and it picked up both MCP
+servers and all 49 skills on first launch. It comes from the `codex-app` cask
+in `configuration.nix`. One consequence: `~/.codex/config.toml` is a read-only
+store symlink, so a setting changed in the app's UI cannot be saved - change it
+in `codex.nix` instead.
+
+**One manual step per machine**, because a login cannot be declarative:
+
+```bash
+codex login     # ChatGPT account or API key, or sign in inside the app
+codex doctor    # config, auth, MCP servers, all in one report
+```
+
+Two things to know about the parity. A brand new skill needs a `./rebuild.sh`
+before Codex lists it, while Claude Code sees it immediately - editing an
+existing one needs no rebuild in either, since the links point at the working
+copy. And a skill that drives Claude Code by name, or reaches for a Claude-only
+MCP server, will not do the same thing under Codex: the knowledge in it travels,
+the plumbing does not.
+
+---
+
 ## Basic Memory
 
 [Basic Memory](https://basicmemory.com) is the long-term knowledge store the AI
@@ -702,13 +781,15 @@ from an untrusted third-party tap, and that attribute is what puts
 `trusted: true` in the Brewfile. `./rebuild.sh` installs it with no manual
 `brew trust` step.
 
-Register the MCP server once per machine. User scope writes `~/.claude.json`,
-so it is available in every project; that file is left to Claude Code for the same
-reason as `~/.claude/settings.json`.
+Registering the MCP server is not a manual step any more: it is declared in
+`codex.nix`, which hands it to Codex and merges it into Claude Code's own
+config on every `./rebuild.sh`. See [Coding agents](#coding-agents) below.
+Check it landed with:
 
 ```bash
-claude mcp add -s user basic-memory basic-memory mcp
 claude mcp get basic-memory   # should say Connected
+codex mcp list                # should list basic-memory
+tail ~/Library/Logs/Claude/mcp-server-basic-memory.log   # the desktop app
 ```
 
 **Projects mirror `~/github`.** A repo at `~/github/<org>/<repo>` gets a Basic
@@ -881,6 +962,9 @@ the private half ever leaks.
 | Thing | Why |
 | --- | --- |
 | Claude Code's own version | The `claude-code@latest` cask tracks upstream's `latest` channel, so `./rebuild.sh` upgrades it; the binary is Nix-declared, its release is not |
+| Codex's and Claude Code's logins | Account credentials. `codex login`, and Claude Code's own sign-in, once per machine |
+| The desktop app's chat skills | They come from the claude.ai account and sync themselves into `~/Library/Application Support/Claude/`. Only the *local agent* sessions inside the app read `~/.claude/skills` |
+| `~/.claude.json` | Claude Code's own file - project history, trust decisions. `codex.nix` merges the declared MCP servers into it and touches nothing else |
 | OMP's version and its `~/.omp` config | The tap formula tracks upstream's latest release, so `./rebuild.sh` upgrades it; omp writes its own config, and its logins are account credentials |
 | Setapp's apps | Setapp installs and updates its own catalogue |
 | Node / Bun / Go | `mise` handles per-project versions; Nix installs mise |
