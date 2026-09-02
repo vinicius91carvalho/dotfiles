@@ -27,14 +27,20 @@
 #                 own skills there; the ones that arrive as a Claude Code
 #                 plugin are linked by the second activation script below.
 #
-# The desktop app (the `codex-app` cask in configuration.nix) is the same agent
-# behind a GUI and reads the same $CODEX_HOME, so it needs nothing of its own -
-# it picks up the config.toml and the skills below on first launch. One thing
-# follows from that: ~/.codex/config.toml is a read-only store symlink, so a
-# setting changed in the app's UI cannot be written back. Change it here
-# instead. If the app ever does replace the file, the next activation backs the
-# stray copy up as .before-nix and relinks, which loses the UI change but
-# breaks nothing.
+# The binary itself is not installed here. `programs.codex.package = null`
+# below, and the `codex` cask in configuration.nix provides it, because nixpkgs
+# tracks weeks behind a tool that ships almost daily. This file owns the
+# config; that cask owns the binary.
+#
+# The desktop app is not declared at all - see the note where `codex-app` used
+# to be in configuration.nix. `codex app` installs it on demand, and it is the
+# same agent behind a GUI reading the same $CODEX_HOME, so it needs nothing of
+# its own: it picks up the config.toml and the skills below on first launch.
+# One thing follows from that: ~/.codex/config.toml is a read-only store
+# symlink, so a setting changed in the app's UI cannot be written back. Change
+# it here instead. If the app ever does replace the file, the next activation
+# backs the stray copy up as .before-nix and relinks, which loses the UI change
+# but breaks nothing.
 #
 # Not declarative and cannot be: the login. Once per machine, `codex login`,
 # or sign in inside the desktop app.
@@ -78,6 +84,13 @@ in
 
   programs.codex = {
     enable = true;
+
+    # No package: the binary is the `codex` cask in configuration.nix, which
+    # tracks upstream within a day, while pkgs.codex on the 26.05 branch sat
+    # six weeks behind. `enable` here is only about the config below - with
+    # `package = null` home-manager writes ~/.codex/config.toml and skips
+    # home.packages, which is exactly the split we want.
+    package = null;
 
     # Translate programs.mcp.servers above into [mcp_servers.*] in
     # ~/.codex/config.toml.

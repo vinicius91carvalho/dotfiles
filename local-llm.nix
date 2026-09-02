@@ -122,7 +122,23 @@ let
         echo "oMLX nao esta instalado; veja o README"; return 0
       fi
 
-      json="$(${pkgs.curl}/bin/curl -fsS -m 20 "$API" 2>/dev/null || true)"
+      # Authenticated if a token is to be had, anonymous if not. GitHub gives
+      # an IP 60 anonymous API calls an hour, and a rebuild spends five of
+      # them, so on a busy afternoon this check is simply refused and the
+      # update never happens - the message below is what a 403 looks like from
+      # here. rebuild.sh exports GITHUB_TOKEN for exactly this; `gh auth token`
+      # is the fallback that makes `omlxctl update` work on its own too.
+      # The token goes in through `--config -`, i.e. curl's stdin, and not
+      # through `-H`. A command line is public: anyone on the machine can read
+      # it out of `ps` while the request is in flight. Nothing is written to
+      # disk either way.
+      token="''${GITHUB_TOKEN:-''${GH_TOKEN:-$(${pkgs.gh}/bin/gh auth token 2>/dev/null || true)}}"
+      if [ -n "$token" ]; then
+        json="$(printf 'header = "Authorization: Bearer %s"\n' "$token" \
+          | ${pkgs.curl}/bin/curl -fsS -m 20 --config - "$API" 2>/dev/null || true)"
+      else
+        json="$(${pkgs.curl}/bin/curl -fsS -m 20 "$API" 2>/dev/null || true)"
+      fi
       if [ -z "$json" ]; then
         echo "oMLX: nao consegui consultar o GitHub, seguindo"; return 0
       fi
@@ -156,8 +172,19 @@ let
       # Never install what Gatekeeper will not vouch for. Upstream notarizes
       # every release, so an unsigned one means something is wrong upstream or
       # in transit - either way it is not going into /Applications.
-      if ! /usr/sbin/spctl -a -t install "$mnt/oMLX.app" 2>&1 | grep -q accepted; then
+      #
+      # The verdict is the exit status, not the output. This guard used to be
+      # `spctl ... 2>&1 | grep -q accepted`, and `spctl -a` prints NOTHING when
+      # it accepts - the word "accepted" only appears under -vv. So the grep
+      # never matched, every update aborted, and the message on screen blamed
+      # upstream for a bug that was here: the Mac sat on 0.6.3rc3 while each
+      # rebuild printed a Gatekeeper failure for a properly notarized release.
+      #
+      # -vv is kept for the failing branch only, where its output is the reason
+      # the app was refused and the thing worth reading.
+      if ! /usr/sbin/spctl -a -t install "$mnt/oMLX.app" 2>/dev/null; then
         echo "oMLX $want NAO passou no Gatekeeper; abortando e mantendo $have" >&2
+        /usr/sbin/spctl -a -t install -vv "$mnt/oMLX.app" >&2 || true
         return 1
       fi
 

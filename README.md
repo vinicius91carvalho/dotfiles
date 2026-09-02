@@ -243,9 +243,27 @@ sudo darwin-rebuild --rollback
 ```
 
 `rebuild.sh` links the repo to `~/.dotfiles`, stages new files (Nix only sees
-files git knows about), refreshes `flake.lock` as your own user, then runs
+files git knows about), updates `flake.lock` as your own user, then runs
 `sudo darwin-rebuild switch --impure` with `DOTFILES_USER` set to your account
 and `DOTFILES_GPG_KEY` passed through.
+
+Every rebuild moves the lock, so every rebuild is also an update. That is safe
+because every input points at a 26.05 release branch, not a rolling one: the
+lock walks along patches and backports and cannot cross into the next major on
+its own. When an update does break something, `git checkout flake.lock &&
+./rebuild.sh` puts the old one back.
+
+**A rebuild borrows your `gh` token.** GitHub allows 60 anonymous API calls an
+hour per IP, and one rebuild spends five of them - one per flake input to
+resolve its branch to a commit, plus `omlxctl`'s release check. Three rebuilds
+in an hour and the budget is gone, and the failure is a quiet one: nix warns
+`HTTP error 403`, keeps `using cached version`, and the build succeeds while
+the lock silently stops moving. So `rebuild.sh` reads `gh auth token` at run
+time and hands it to nix through `NIX_CONFIG`, which buys 5000 calls an hour.
+The token is never written to the repo, to `flake.lock` or to the store, and it
+is deliberately **not** passed through `sudo`, where it would sit in an argv
+that anyone on the machine can read in `ps`. A machine where `gh` is not logged
+in just falls back to anonymous calls and says so.
 
 I commit only after a rebuild works, so the git history is a history of
 configs that actually ran.
@@ -462,13 +480,18 @@ in `~/.orca`, which it manages itself.
 
 Orca finds an agent by looking for that agent's binary name on `PATH` - its
 catalogue maps `omp` to OMP, `claude` to Claude Code, and so on. So an agent
-gets "integrated" with Orca simply by being installed. Two are declared in
+gets "integrated" with Orca simply by being installed. Three are declared in
 `configuration.nix`:
 
 | Agent | Comes from | Binary |
 | --- | --- | --- |
 | Claude Code | `claude-code@latest` cask | `claude` |
+| Codex | `codex` cask | `codex` |
 | [OMP](https://omp.sh) | `can1357/tap` formula `omp` | `omp` |
+
+All three are casks or formulae rather than Nix packages, and for the same
+reason: they ship far faster than a nixpkgs release branch can follow.
+`onActivation.upgrade` moves them on every rebuild.
 
 ---
 
@@ -597,11 +620,19 @@ it does not exist on a machine that cannot run the model:
 
 `./rebuild.sh` runs `omlxctl update` before it hands over to `darwin-rebuild`.
 oMLX ships as a DMG, outside both Nix and Homebrew, so nothing else would ever
-notice a new release. The update verifies Gatekeeper (`spctl -a -t install` must
-say *accepted*) before anything enters `/Applications`, keeps the previous
-`.app` for `rollback`, and exits quietly when already current. It follows
-whatever GitHub calls `latest`, **release candidates included** — hence the
-backup.
+notice a new release. The update verifies Gatekeeper before anything enters
+`/Applications`, keeps the previous `.app` for `rollback`, and exits quietly
+when already current. It follows whatever GitHub calls `latest`, **release
+candidates included** — hence the backup.
+
+That Gatekeeper check reads `spctl`'s **exit status**, and that detail is the
+whole bug it once had. The guard used to grep the output for the word
+*accepted*, but `spctl -a` prints nothing at all when it accepts - *accepted*
+only appears under `-vv`. So the grep never matched, every update aborted, and
+the message on screen blamed upstream. The Mac sat on `0.6.3rc3` while each
+rebuild printed a Gatekeeper failure for a release that was properly notarized.
+`-vv` is still used, but only on the failing branch, where its output is the
+reason worth reading.
 
 ### Performance, as measured on this Mac
 
@@ -745,12 +776,19 @@ moves on every plugin update, which is why it is a script and not a `home.file`
 entry. It only removes links it made itself, and never overwrites a
 Nix-managed name.
 
-**The Codex desktop app needs no configuration of its own.** It is the same
-agent behind a GUI, it reads the same `$CODEX_HOME`, and it picked up both MCP
-servers and all 49 skills on first launch. It comes from the `codex-app` cask
-in `configuration.nix`. One consequence: `~/.codex/config.toml` is a read-only
-store symlink, so a setting changed in the app's UI cannot be saved - change it
-in `codex.nix` instead.
+**The `codex` binary comes from a Homebrew cask, not from Nix.** Same reason as
+Claude Code: `pkgs.codex` on the 26.05 branch sat on 0.133.0 while upstream was
+on 0.152.0. `programs.codex.package = null` keeps home-manager writing
+`~/.codex/config.toml` without also installing a second, stale binary.
+
+**The Codex desktop app is not declared.** Both casks for it were dead ends -
+`codex-app` is deprecated and due to be disabled in July 2027, and `chatgpt`
+replaces it - so neither is tracked here. `codex app` installs the GUI on
+demand when it is wanted. It needs no configuration either way: it is the same
+agent, it reads the same `$CODEX_HOME`, and it picks up the MCP servers and
+whatever is in `~/.codex/skills` on first launch. One consequence:
+`~/.codex/config.toml` is a read-only store symlink, so a setting changed in
+the app's UI cannot be saved - change it in `codex.nix` instead.
 
 **One manual step per machine**, because a login cannot be declarative:
 
@@ -962,6 +1000,7 @@ the private half ever leaks.
 | Thing | Why |
 | --- | --- |
 | Claude Code's own version | The `claude-code@latest` cask tracks upstream's `latest` channel, so `./rebuild.sh` upgrades it; the binary is Nix-declared, its release is not |
+| Codex's own version | Same story: the `codex` cask follows upstream's tarball and `./rebuild.sh` upgrades it. `programs.codex.package = null` so nothing installs a second, older one |
 | Codex's and Claude Code's logins | Account credentials. `codex login`, and Claude Code's own sign-in, once per machine |
 | The desktop app's chat skills | They come from the claude.ai account and sync themselves into `~/Library/Application Support/Claude/`. Only the *local agent* sessions inside the app read `~/.claude/skills` |
 | `~/.claude.json` | Claude Code's own file - project history, trust decisions. `codex.nix` merges the declared MCP servers into it and touches nothing else |
@@ -979,6 +1018,16 @@ the private half ever leaks.
 
 **`error: Path 'foo.nix' ... is not tracked by Git`** — Nix reads the flake
 through git. `git add foo.nix`.
+
+**`warning: Using 'builtins.derivation' to create a derivation named
+'options.json' ... without a proper context`** — every rebuild prints this and
+it is not this repo's bug. It is home-manager building its options manpage;
+nix-darwin builds the same kind of file and stays quiet. Setting
+`manual.manpages.enable = false` in `home.nix` makes it go away, and that was
+deliberately **not** done: it removes the trigger, not the bug, and costs `man
+home-configuration.nix`. `flake.lock` now moves on every rebuild, so upstream's
+fix will arrive on its own. Nothing about the build is actually wrong - the
+docs still generate.
 
 **`error: undefined variable 'x'` in `flake.nix`** — an input is in `inputs`
 but missing from the `outputs` argument list. It must be in both.

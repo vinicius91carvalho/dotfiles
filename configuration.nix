@@ -152,19 +152,35 @@
       "docker-desktop"
       "claude" # Claude desktop app (distinct from the Claude Code CLI)
       "claude-code@latest" # see the Claude Code note at the top of this file
-      # Codex desktop app - the GUI over the same agent as the codex CLI. It
-      # reads $CODEX_HOME, so codex.nix's MCP servers and skills are already
-      # its own; there is nothing to configure per client.
+      # The codex CLI, for the same reason Claude Code comes from a cask: the
+      # nixpkgs package tracks far behind upstream. codex ships a release most
+      # days, and pinning it to flake.lock on the 26.05 branch left this Mac on
+      # 0.133.0 while 0.152.0 was out - six weeks of fixes missed, in the tool
+      # that is meant to be current. The cask follows upstream's tarball within
+      # a day, and `onActivation.upgrade` above moves it on every rebuild.
       #
-      # Homebrew marks this cask deprecated, "discontinued", and points at the
-      # `chatgpt` cask instead. That looks stale rather than true: upstream
-      # rebuilt Codex.dmg the same day this line was written, and the codex
-      # CLI still installs the app from it. The cask is kept because it is the
-      # only declarative way to get the app onto a fresh machine, and because
-      # `auto_updates true` means the app then updates itself past whatever
-      # version the cask pins. If Homebrew ever disables it, `codex app`
-      # downloads and installs the same bundle by hand.
-      "codex-app"
+      # So codex.nix sets `programs.codex.package = null`: home-manager still
+      # writes ~/.codex/config.toml, it just does not also install a second
+      # binary. That matters here - /opt/homebrew/bin comes before the Nix
+      # profile on PATH, so two installs would not even be a visible conflict,
+      # only a stale `codex` that never runs and a version that drifts.
+      #
+      # Its `zap` is `rmdir "~/.codex"`, which only removes that directory when
+      # it is empty. AGENTS.md, config.toml and skills live there, so dropping
+      # this cask cannot take the config with it the way claude-code's zap can.
+      "codex"
+      # No Codex desktop app here on purpose. There were two casks for it and
+      # neither was worth declaring: `codex-app` is marked deprecated and
+      # discontinued and is set to be disabled on 2027-07-12, and its pinned
+      # Codex.app (26.623.141536) is months behind the `chatgpt` cask that
+      # Homebrew names as the replacement. Both carry bundle id
+      # `com.openai.codex` and both zap `~/.codex`, so keeping either one meant
+      # tracking a cask that is on its way out.
+      #
+      # The terminal is where this agent is actually used, and `codex` above is
+      # current. When a GUI is wanted, `codex app` downloads and installs the
+      # same bundle on demand - it reads the same $CODEX_HOME, so codex.nix's
+      # MCP servers and skills are already its own with nothing to configure.
       # Orca - a desktop app for running several coding agents side by side,
       # each in its own git worktree. It replaces herdr, which did the same
       # job from the terminal as a client/server pair.
