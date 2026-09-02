@@ -505,10 +505,10 @@ Homebrew, from upstream's tap, because it is not in nixpkgs. The formula only
 downloads the published `omp-darwin-arm64` release binary - nothing is built -
 so `onActivation.upgrade` moves it to the current release on every rebuild.
 
-Its config lives in `~/.omp` and is **not** managed here: model roles in
-`agent/config.yml`, extra providers in `agent/models.yml`, both written by omp
-itself. On the first run in a repo it imports the rules and skills already in
-`~/.claude`, so `AGENTS.md` applies to it without any extra wiring.
+Its account vault and sessions stay private under `~/.omp`. The local Qwen
+provider, roles and compaction limits are written by the Nix-owned
+`omlxctl profile` command. On the first run in a repo it imports the rules and
+skills already in `~/.claude`, so `AGENTS.md` applies with no extra wiring.
 
 One thing is per-machine and manual, because it is an account, not a config
 file: **omp ships with no credentials.** Run `omp` once and use `/login` to add
@@ -584,8 +584,9 @@ is deliberate:
   `--with-custom-kernel`, which compiles `.metal` sources, which needs the
   Metal toolchain, which needs full Xcode — about 20 GB of build dependency to
   arrive at binaries the DMG already carries.
-- `~/.omlx/settings.json` and `~/.omlx/model_settings.json` are written by oMLX
-  itself, so they are left to it, like `~/.omp` and `~/.claude/settings.json`.
+- oMLX still owns the secret in `~/.omlx/settings.json`. Nix owns only the
+  measured performance profiles. Switching one merges its settings into the
+  live file, so the secret never enters this public repo.
 
 Bootstrap it once per machine — **and only on a machine with more than 32 GB**;
 below that `local-llm.nix` is a no-op and the download would be wasted:
@@ -617,6 +618,9 @@ it does not exist on a machine that cannot run the model:
 | `omlxctl logs` | follows `~/Library/Logs/omlx.log` |
 | `omlxctl update` | checks the published release and installs it |
 | `omlxctl rollback` | restores the previous `.app` |
+| `omlxctl profile daily` | 30K exact context for normal coding; restarts oMLX and updates OMP |
+| `omlxctl profile scan64` | 64K text-only scan with SpecPrefill 20%; restarts oMLX and updates OMP |
+| `omlxctl profile` / `profile check` | shows the active profile / proves all four live config files match it |
 
 `./rebuild.sh` runs `omlxctl update` before it hands over to `darwin-rebuild`.
 oMLX ships as a DMG, outside both Nix and Homebrew, so nothing else would ever
@@ -647,7 +651,38 @@ reason worth reading.
 ### Driving it from OMP
 
 `~/.omp/agent/models.yml` declares the provider and `config.yml` the roles and
-compaction. Neither is managed by Nix — omp rewrites both.
+compaction. `omlxctl profile` writes both from values stored in
+`local-llm.nix`. It also remembers the active name under
+`~/.local/state/omlx/profile`, so the next rebuild applies the same choice.
+
+Use the daily profile for almost everything:
+
+```bash
+omlxctl profile daily
+omp
+```
+
+It gives OMP a 30K exact window, compacts at 25K, keeps image input, disables
+old thinking replay, and uses the 27 GB oMLX guard. Exact means no prompt lines
+are dropped. The stable SSD prefix still covers the large system/tool prefix.
+
+Use the scan profile only for a large, text-only repository pass:
+
+```bash
+omlxctl profile scan64
+omp
+```
+
+It gives OMP 64K, compacts at 60K, raises the tested oMLX guard to 28 GB and
+turns on SpecPrefill at 20%. SpecPrefill means the small draft reads all text
+and chooses the 20% the main model sees. It is faster than exact 64K, but can
+miss one important line. Images are disabled in this profile because
+SpecPrefill does not cover them.
+
+The command restarts oMLX itself. Start a new OMP session after switching,
+because a running session has already loaded its old window. `omlxctl profile`
+shows the saved name, and `omlxctl profile check` checks oMLX, its model, OMP's
+window and OMP's compaction limit.
 
 The number that matters is `contextWindow: 30000`, **not** the `262144` the
 server advertises. oMLX does not truncate, does not compact and has no context
@@ -685,7 +720,8 @@ Two settings were arrived at by measurement, not by taste, and both live in
 
 | Setting | Measured effect on this M3 Max |
 | --- | --- |
-| `--memory-guard-gb 27` (was 24) | a 12.6k-token prompt: **23 min → 92 s** |
+| daily memory guard 27 GB (was 24) | a 12.6k-token prompt: **23 min → 92 s** |
+| scan64 memory guard 28 GB | completed the tested 64K SpecPrefill request without new swap |
 | `mtp_enabled` (per-model) | generation: **17.2 → 32.2 tok/s** |
 
 The first one is the counter-intuitive one. The prefill working set is ~10 MB
@@ -750,15 +786,24 @@ file to edit and no rebuild needed to change it.
 
 The MCP servers are declared once, in `programs.mcp.servers`. home-manager
 writes the neutral list to `~/.config/mcp/mcp.json`, and Codex's module
-translates it into `[mcp_servers.*]` in `config.toml`. The two Claude clients
-cannot be given them the same way, because each keeps its servers in a file it
-also writes itself - `~/.claude.json` for Claude Code, which also holds project
-history and trust decisions, and `claude_desktop_config.json` for the desktop
-app, which also holds its app preferences. So an activation script merges the
-declared servers into both and leaves everything else in them alone. Nix owns
-the content, each app keeps its file. The declared side wins on a name
-collision, which is what makes this repo the source of truth. The desktop app
-only sees the change after a restart; Claude Code sees it in the next session.
+translates it into `[mcp_servers.*]` in `config.toml`.
+
+None of the three config files is *linked* into place, though, because all
+three are files their app also writes itself - `~/.claude.json` for Claude
+Code, which also holds project history and trust decisions;
+`claude_desktop_config.json` for the desktop app, which also holds its app
+preferences; and `~/.codex/config.toml`, which holds which folders Codex
+trusts. Point one of them at the Nix store and the app can no longer save:
+Codex writes atomically, so it resolves the link, tries to put a temp file in
+`/nix/store`, and is denied - which leaves its TUI unable to get past the
+"trust this folder?" prompt it shows on startup, so Codex will not open at all.
+
+So activation scripts merge the declared servers into all three and leave
+everything else in them alone. Nix owns the content, each app keeps its file.
+The declared side wins on a name collision, which is what makes this repo the
+source of truth. What a merge cannot do is remove: delete a server here and it
+stays in those files until it is deleted there too. The desktop app only sees
+a change after a restart; Claude Code and Codex see it in the next session.
 
 Server commands are written as absolute paths for the desktop app's sake. A
 GUI app is launched by launchd, not by a login shell, so the PATH it hands an
@@ -778,17 +823,17 @@ Nix-managed name.
 
 **The `codex` binary comes from a Homebrew cask, not from Nix.** Same reason as
 Claude Code: `pkgs.codex` on the 26.05 branch sat on 0.133.0 while upstream was
-on 0.152.0. `programs.codex.package = null` keeps home-manager writing
-`~/.codex/config.toml` without also installing a second, stale binary.
+on 0.152.0. `programs.codex.package = null` keeps home-manager generating
+the `config.toml` content without also installing a second, stale binary.
 
 **The Codex desktop app is not declared.** Both casks for it were dead ends -
 `codex-app` is deprecated and due to be disabled in July 2027, and `chatgpt`
 replaces it - so neither is tracked here. `codex app` installs the GUI on
 demand when it is wanted. It needs no configuration either way: it is the same
 agent, it reads the same `$CODEX_HOME`, and it picks up the MCP servers and
-whatever is in `~/.codex/skills` on first launch. One consequence:
-`~/.codex/config.toml` is a read-only store symlink, so a setting changed in
-the app's UI cannot be saved - change it in `codex.nix` instead.
+whatever is in `~/.codex/skills` on first launch. A setting changed in its UI
+is saved and kept, because `config.toml` is merged rather than linked - but
+anything `codex.nix` declares is put back on the next `./rebuild.sh`.
 
 **One manual step per machine**, because a login cannot be declarative:
 
@@ -1004,7 +1049,7 @@ the private half ever leaks.
 | Codex's and Claude Code's logins | Account credentials. `codex login`, and Claude Code's own sign-in, once per machine |
 | The desktop app's chat skills | They come from the claude.ai account and sync themselves into `~/Library/Application Support/Claude/`. Only the *local agent* sessions inside the app read `~/.claude/skills` |
 | `~/.claude.json` | Claude Code's own file - project history, trust decisions. `codex.nix` merges the declared MCP servers into it and touches nothing else |
-| OMP's version and its `~/.omp` config | The tap formula tracks upstream's latest release, so `./rebuild.sh` upgrades it; omp writes its own config, and its logins are account credentials |
+| OMP's version, accounts and sessions | The tap tracks upstream; logins and sessions are private. Nix owns only the local Qwen profile values applied by `omlxctl profile` |
 | Setapp's apps | Setapp installs and updates its own catalogue |
 | Node / Bun / Go | `mise` handles per-project versions; Nix installs mise |
 | Nix itself | Determinate owns the daemon |

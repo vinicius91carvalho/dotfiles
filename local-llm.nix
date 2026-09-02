@@ -1,4 +1,10 @@
-{ lib, pkgs, config, memGb, ... }:
+{
+  lib,
+  pkgs,
+  config,
+  memGb,
+  ...
+}:
 
 ##############################################################################
 # Local LLM - Qwen3.8-27B served by oMLX, for machines with more than 32 GB
@@ -36,6 +42,268 @@
 ##############################################################################
 
 let
+  modelId = "Qwen3.8-27B-AWQ-5.0bpw";
+
+  dailyOmlxPatch = pkgs.writeText "omlx-daily-settings.json" (
+    builtins.toJSON {
+      model.hide_helper_models = true;
+      memory = {
+        prefill_memory_guard = true;
+        memory_guard_tier = "custom";
+        memory_guard_custom_ceiling_gb = 27.0;
+        soft_threshold = 0.85;
+        hard_threshold = 0.95;
+        prefill_safe_zone_ratio = 0.8;
+        prefill_min_chunk_tokens = 32;
+      };
+      scheduler = {
+        max_concurrent_requests = 1;
+        embedding_batch_size = 1;
+        chunked_prefill = false;
+        prefill_priority = "context";
+      };
+      cache = {
+        enabled = true;
+        hot_cache_only = false;
+        gdn_ssd_split_enabled = true;
+        gdn_snapshot_storage = "auto";
+        gdn_ssd_pending_max_size = "512MB";
+        gdn_sidecar_precision = "fp32";
+        ssd_cache_dir = "${config.home.homeDirectory}/.omlx/ssd-cache";
+        ssd_cache_max_size = "60GB";
+        hot_cache_max_size = "2GB";
+        initial_cache_blocks = 256;
+      };
+      sampling.max_context_window = 262144;
+    }
+  );
+
+  scan64OmlxPatch = pkgs.writeText "omlx-scan64-settings.json" (
+    builtins.toJSON {
+      model.hide_helper_models = true;
+      memory = {
+        prefill_memory_guard = true;
+        memory_guard_tier = "custom";
+        memory_guard_custom_ceiling_gb = 28.0;
+        soft_threshold = 0.9;
+        hard_threshold = 0.99;
+        prefill_safe_zone_ratio = 0.9;
+        prefill_min_chunk_tokens = 32;
+      };
+      scheduler = {
+        max_concurrent_requests = 1;
+        embedding_batch_size = 1;
+        chunked_prefill = true;
+        prefill_priority = "context";
+      };
+      cache = {
+        enabled = true;
+        hot_cache_only = false;
+        gdn_ssd_split_enabled = true;
+        gdn_snapshot_storage = "auto";
+        gdn_ssd_pending_max_size = "512MB";
+        gdn_sidecar_precision = "fp32";
+        ssd_cache_dir = "${config.home.homeDirectory}/.omlx/ssd-cache";
+        ssd_cache_max_size = "60GB";
+        hot_cache_max_size = "0GB";
+        initial_cache_blocks = 64;
+      };
+      sampling.max_context_window = 262144;
+    }
+  );
+
+  dailyModelSettings = pkgs.writeText "omlx-daily-model-settings.json" (
+    builtins.toJSON {
+      version = 1;
+      models.${modelId} = {
+        max_context_window = 262144;
+        turboquant_kv_enabled = true;
+        turboquant_kv_bits = 3.5;
+        mtp_enabled = true;
+        specprefill_enabled = false;
+      };
+    }
+  );
+
+  scan64ModelSettings = pkgs.writeText "omlx-scan64-model-settings.json" (
+    builtins.toJSON {
+      version = 1;
+      models.${modelId} = {
+        max_context_window = 262144;
+        turboquant_kv_enabled = true;
+        turboquant_kv_bits = 3.5;
+        mtp_enabled = true;
+        specprefill_enabled = true;
+        specprefill_draft_model = "${config.home.homeDirectory}/tools/qwen3.8-27b/mlx-community/Qwen3.5-0.8B-MLX-bf16";
+        specprefill_keep_pct = 0.2;
+        specprefill_threshold = 8192;
+      };
+    }
+  );
+
+  dailyOmpModels = pkgs.writeText "omp-daily-models.yml" ''
+    providers:
+      omlx:
+        baseUrl: http://127.0.0.1:1337/v1
+        api: openai-completions
+        auth: none
+        models:
+          - id: ${modelId}
+            name: Qwen3.8 27B local - daily exact
+            reasoning: true
+            input: [text, image]
+            contextWindow: 30000
+            maxTokens: 4096
+            compat:
+              replayReasoningContent: false
+              qwenPreserveThinking: false
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  '';
+
+  scan64OmpModels = pkgs.writeText "omp-scan64-models.yml" ''
+    providers:
+      omlx:
+        baseUrl: http://127.0.0.1:1337/v1
+        api: openai-completions
+        auth: none
+        models:
+          - id: ${modelId}
+            name: Qwen3.8 27B local - 64K scan
+            reasoning: true
+            input: [text]
+            contextWindow: 65536
+            maxTokens: 4096
+            compat:
+              replayReasoningContent: false
+              qwenPreserveThinking: false
+            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 }
+  '';
+
+  ompConfig =
+    name: threshold: idleThreshold:
+    pkgs.writeText "omp-${name}-config.yml" ''
+      modelRoles:
+        plan: omlx/${modelId}:xhigh
+        default: omlx/${modelId}:medium
+        vision: omlx/${modelId}:medium
+        smol: omlx/${modelId}:low
+        commit: omlx/${modelId}:low
+      promptProfile: compact
+      personality: none
+      includeModelInPrompt: false
+      tools:
+        xdevForceMount:
+          - hub
+          - eval
+          - task
+          - todo
+          - web_search
+        xdevDocs: catalog
+      compaction:
+        thresholdTokens: ${toString threshold}
+        keepRecentTokens: 3000
+        reserveTokens: 2500
+        idleEnabled: true
+        idleThresholdTokens: ${toString idleThreshold}
+        idleTimeoutSeconds: 120
+      defaultThinkingLevel: low
+      thinkingBudgets:
+        xhigh: 6000
+        max: 6000
+        high: 6000
+        medium: 3000
+        low: 1500
+        minimal: 800
+      symbolPreset: nerd
+      composer:
+        shape: pi
+      theme:
+        dark: dark-dracula
+        light: light-catppuccin
+      setupVersion: 2
+      statusLine:
+        preset: default
+        transparent: true
+        compactThinkingLevel: true
+      terminal:
+        showProgress: true
+      tui:
+        textSizing: true
+      display:
+        shimmer: classic
+        showTokenUsage: true
+      readLineNumbers: true
+    '';
+
+  dailyOmpConfig = ompConfig "daily" 25000 24000;
+  scan64OmpConfig = ompConfig "scan64" 60000 55000;
+
+  # Writes only performance settings. oMLX's auth secret stays in its existing
+  # file and OMP's account vault is never touched. The active name is mutable
+  # state so a later Nix rebuild reapplies the user's last choice.
+  applyLocalLlmProfile = pkgs.writeShellScript "apply-local-llm-profile" ''
+    set -euo pipefail
+
+    name="''${1:-daily}"
+    case "$name" in
+      daily)
+        settings_patch=${dailyOmlxPatch}
+        model_patch=${dailyModelSettings}
+        omp_models=${dailyOmpModels}
+        omp_config=${dailyOmpConfig}
+        ;;
+      scan64)
+        settings_patch=${scan64OmlxPatch}
+        model_patch=${scan64ModelSettings}
+        omp_models=${scan64OmpModels}
+        omp_config=${scan64OmpConfig}
+        ;;
+      *)
+        echo "perfil desconhecido: $name (use daily ou scan64)" >&2
+        exit 2
+        ;;
+    esac
+
+    omlx_dir="$HOME/.omlx"
+    omp_dir="$HOME/.omp/agent"
+    state_dir="$HOME/.local/state/omlx"
+    mkdir -p "$omlx_dir" "$omp_dir" "$state_dir"
+
+    settings="$omlx_dir/settings.json"
+    model_settings="$omlx_dir/model_settings.json"
+    settings_tmp="$omlx_dir/.settings.json.$$"
+    model_tmp="$omlx_dir/.model_settings.json.$$"
+    omp_models_tmp="$omp_dir/.models.yml.$$"
+    omp_config_tmp="$omp_dir/.config.yml.$$"
+    trap 'rm -f "$settings_tmp" "$model_tmp" "$omp_models_tmp" "$omp_config_tmp"' EXIT
+
+    if [ -f "$settings" ]; then
+      ${pkgs.jq}/bin/jq --slurpfile profile "$settings_patch" '. * $profile[0]' \
+        "$settings" > "$settings_tmp"
+    else
+      ${pkgs.jq}/bin/jq -n --slurpfile profile "$settings_patch" '$profile[0]' \
+        > "$settings_tmp"
+    fi
+
+    if [ -f "$model_settings" ]; then
+      ${pkgs.jq}/bin/jq --slurpfile profile "$model_patch" \
+        '.version = 1 | .models = ((.models // {}) + $profile[0].models)' \
+        "$model_settings" > "$model_tmp"
+    else
+      ${pkgs.jq}/bin/jq -n --slurpfile profile "$model_patch" '$profile[0]' \
+        > "$model_tmp"
+    fi
+
+    cp "$omp_models" "$omp_models_tmp"
+    cp "$omp_config" "$omp_config_tmp"
+    chmod 600 "$settings_tmp" "$model_tmp" "$omp_models_tmp" "$omp_config_tmp"
+    mv "$settings_tmp" "$settings"
+    mv "$model_tmp" "$model_settings"
+    mv "$omp_models_tmp" "$omp_dir/models.yml"
+    mv "$omp_config_tmp" "$omp_dir/config.yml"
+    printf '%s\n' "$name" > "$state_dir/profile"
+  '';
+
   # omlxctl - the day-to-day control surface for the local model server.
   #
   # It lives here, behind the same `memGb > 32` gate as the agent, so it is not
@@ -48,6 +316,7 @@ let
     PLIST="$HOME/Library/LaunchAgents/org.nix-community.home.omlx.plist"
     APP="/Applications/oMLX.app"
     BACKUP_DIR="$HOME/.local/share/omlx/backup"
+    PROFILE_STATE="$HOME/.local/state/omlx/profile"
     URL="http://127.0.0.1:1337"
     API="https://api.github.com/repos/jundot/omlx/releases/latest"
 
@@ -63,6 +332,14 @@ let
       echo "servidor continua de pe" >&2; return 1
     }
 
+    wait_unloaded() {
+      for _ in $(seq 40); do
+        /bin/launchctl print "$AGENT" >/dev/null 2>&1 || return 0
+        sleep 0.25
+      done
+      echo "servico launchd ainda registrado" >&2; return 1
+    }
+
     installed_version() {
       /usr/bin/defaults read "$APP/Contents/Info.plist" \
         CFBundleShortVersionString 2>/dev/null || echo "none"
@@ -70,7 +347,10 @@ let
 
     cmd_start() {
       up && { echo "ja esta de pe"; return 0; }
-      /bin/launchctl bootstrap "gui/$(/usr/bin/id -u)" "$PLIST" 2>/dev/null || true
+      if ! /bin/launchctl bootstrap "gui/$(/usr/bin/id -u)" "$PLIST"; then
+        echo "nao consegui registrar o servico launchd" >&2
+        return 1
+      fi
       wait_up && echo "de pe em $URL"
     }
 
@@ -78,7 +358,9 @@ let
     # as a crash and brings the server straight back.
     cmd_stop() {
       /bin/launchctl bootout "$AGENT" 2>/dev/null || true
-      wait_down && echo "parado"
+      wait_down
+      wait_unloaded
+      echo "parado"
     }
 
     cmd_restart() {
@@ -88,11 +370,12 @@ let
 
     cmd_status() {
       printf 'versao instalada : %s\n' "$(installed_version)"
+      printf 'perfil ativo     : %s\n' "$(cat "$PROFILE_STATE" 2>/dev/null || echo daily)"
       if up; then
         printf 'servidor         : de pe em %s\n' "$URL"
         printf 'modelo servido   : %s\n' \
-          "$(${pkgs.curl}/bin/curl -fsS -m 4 "$URL/v1/models" \
-             | ${pkgs.jq}/bin/jq -r '.data[0].id // "nenhum"')"
+          "$(${pkgs.curl}/bin/curl -fsS -m 4 "$URL/health" \
+             | ${pkgs.jq}/bin/jq -r '.default_model // "nenhum"')"
         pid=$(/usr/sbin/lsof -nP -iTCP:1337 -sTCP:LISTEN -t 2>/dev/null | head -1 || true)
         if [ -n "$pid" ]; then
           printf 'memoria residente: %s GB\n' \
@@ -105,6 +388,67 @@ let
       if [ -d "$BACKUP_DIR" ]; then
         printf 'backup guardado  : %s\n' "$(ls "$BACKUP_DIR" 2>/dev/null | tr '\n' ' ')"
       fi
+    }
+
+    cmd_profile_check() {
+      profile="$(cat "$PROFILE_STATE" 2>/dev/null || true)"
+      settings="$HOME/.omlx/settings.json"
+      model_settings="$HOME/.omlx/model_settings.json"
+      omp_models="$HOME/.omp/agent/models.yml"
+      omp_config="$HOME/.omp/agent/config.yml"
+
+      case "$profile" in
+        daily)
+          context=30000; compact=25000; ceiling=27; chunked=false; hot=2GB; spec=false ;;
+        scan64)
+          context=65536; compact=60000; ceiling=28; chunked=true; hot=0GB; spec=true ;;
+        *)
+          echo "perfil salvo invalido: ''${profile:-nenhum}" >&2; return 1 ;;
+      esac
+
+      ${pkgs.jq}/bin/jq -e \
+        --argjson ceiling "$ceiling" --argjson chunked "$chunked" --arg hot "$hot" \
+        '.memory.memory_guard_custom_ceiling_gb == $ceiling and
+         .scheduler.max_concurrent_requests == 1 and
+         .scheduler.chunked_prefill == $chunked and
+         .cache.enabled == true and
+         .cache.hot_cache_max_size == $hot' "$settings" >/dev/null
+      ${pkgs.jq}/bin/jq -e --arg model "${modelId}" --argjson spec "$spec" \
+        '.models[$model].turboquant_kv_bits == 3.5 and
+         .models[$model].mtp_enabled == true and
+         .models[$model].specprefill_enabled == $spec' "$model_settings" >/dev/null
+      ${pkgs.gnugrep}/bin/grep -Eq "^[[:space:]]*contextWindow: $context$" "$omp_models"
+      ${pkgs.gnugrep}/bin/grep -Eq "^[[:space:]]*thresholdTokens: $compact$" "$omp_config"
+      ${pkgs.gnugrep}/bin/grep -Eq '^[[:space:]]*replayReasoningContent: false$' "$omp_models"
+      echo "perfil $profile confere"
+    }
+
+    cmd_profile() {
+      case "''${1:-status}" in
+        status)
+          printf 'ativo     : %s\n' "$(cat "$PROFILE_STATE" 2>/dev/null || echo daily)"
+          printf 'disponiveis: daily scan64\n'
+          ;;
+        check)
+          cmd_profile_check
+          ;;
+        daily|scan64)
+          wanted="$1"
+          was_up=false
+          if up; then was_up=true; cmd_stop; fi
+          if ! ${applyLocalLlmProfile} "$wanted"; then
+            $was_up && cmd_start
+            return 1
+          fi
+          if $was_up; then cmd_start; fi
+          cmd_profile_check
+          echo "abra uma sessao OMP nova para usar o perfil $wanted"
+          ;;
+        *)
+          echo "uso: omlxctl profile {daily|scan64|status|check}" >&2
+          return 2
+          ;;
+      esac
     }
 
     cmd_logs() { exec tail -f "$HOME/Library/Logs/omlx.log"; }
@@ -218,8 +562,9 @@ let
       logs)     cmd_logs ;;
       update)   cmd_update ;;
       rollback) cmd_rollback ;;
+      profile)  cmd_profile "''${2:-status}" ;;
       *)
-        echo "uso: omlxctl {start|stop|restart|status|logs|update|rollback}" >&2
+        echo "uso: omlxctl {start|stop|restart|status|logs|update|rollback|profile}" >&2
         exit 2 ;;
     esac
   '';
@@ -227,6 +572,15 @@ in
 lib.mkIf (memGb > 32) {
 
   home.packages = [ omlxctl ];
+
+  # Reapply the last selected profile on every rebuild. The profile name is
+  # state, while every value it selects lives above in this Nix file.
+  home.activation.localLlmProfile = lib.hm.dag.entryAfter [ "writeBoundary" ] ''
+    profile_state="$HOME/.local/state/omlx/profile"
+    profile="$(cat "$profile_state" 2>/dev/null || echo daily)"
+    case "$profile" in daily|scan64) ;; *) profile=daily ;; esac
+    ${applyLocalLlmProfile} "$profile"
+  '';
 
   launchd.agents.omlx = {
     enable = true;
@@ -261,7 +615,10 @@ lib.mkIf (memGb > 32) {
           # binds 127.0.0.1 with no auth or TLS, so it must never be put behind
           # a proxy or tunnel.
           #
-          # --memory-guard-gb 27, arrived at by measurement, not by taste.
+          # Memory, cache and concurrency are selected by `omlxctl profile`.
+          # They live in settings.json because daily and scan64 need different
+          # limits. Host, port and model directory do not vary, so they remain
+          # process flags here.
           #
           # The ceiling is not the prefill budget. oMLX derives the prefill cap
           # as ceiling * soft_threshold (0.85), and the resident model is
@@ -277,7 +634,7 @@ lib.mkIf (memGb > 32) {
           # under Apple's own Metal cap for this Mac (28.1 GB,
           # max_recommended_working_set_size) so nothing spills.
           #
-          # --max-concurrent-requests 2 rather than the default 8: every extra
+          # Both profiles use one concurrent request: every extra
           # in-flight request carries its own KV cache, and eight of them do not
           # fit next to 17.4 GB of weights.
           #
@@ -288,18 +645,15 @@ lib.mkIf (memGb > 32) {
           exec "$cli" serve \
             --model-dir "$models" \
             --host 127.0.0.1 \
-            --port 1337 \
-            --memory-guard-gb 27 \
-            --max-concurrent-requests 2 \
-            --hot-cache-max-size 2GB \
-            --paged-ssd-cache-dir "$HOME/.omlx/ssd-cache" \
-            --paged-ssd-cache-max-size 60GB
+            --port 1337
         ''}"
       ];
       RunAtLoad = true;
       # "missing bootstrap -> stay quiet" (the wrapper exits 0), while a real
       # crash of a running server still gets restarted.
-      KeepAlive = { SuccessfulExit = false; };
+      KeepAlive = {
+        SuccessfulExit = false;
+      };
       # A crash loop that reloads a 17 GB checkpoint would thrash the disk.
       ThrottleInterval = 30;
       StandardOutPath = "${config.home.homeDirectory}/Library/Logs/omlx.log";

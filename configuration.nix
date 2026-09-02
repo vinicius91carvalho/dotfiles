@@ -120,10 +120,9 @@
       # anything, so `onActivation.upgrade` moves it to the current release on
       # every rebuild.
       #
-      # Its own config lives in ~/.omp (model roles in agent/config.yml,
-      # providers in agent/models.yml) and is not managed here — omp writes it
-      # itself, and on first run in a repo it imports the rules and skills
-      # already in ~/.claude.
+      # Auth and sessions stay private under ~/.omp. The local Qwen provider,
+      # model roles and compaction limits are applied by the Nix-owned
+      # `omlxctl profile` command in local-llm.nix.
       "omp"
       # neovim intentionally not here — it comes from Nix via home.nix, so its
       # version is pinned by flake.lock rather than tracking Homebrew.

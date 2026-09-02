@@ -1,4 +1,9 @@
-{ config, lib, pkgs, ... }:
+{
+  config,
+  lib,
+  pkgs,
+  ...
+}:
 
 ##############################################################################
 # Codex - OpenAI's terminal coding agent, second seat next to Claude Code
@@ -13,12 +18,13 @@
 #                 home.nix links ~/.claude/CLAUDE.md to the same file.
 #
 #   MCP servers   declared once in `programs.mcp.servers` below. Codex picks
-#                 them up through `enableMcpIntegration`, which writes them
-#                 into ~/.codex/config.toml as [mcp_servers.<name>]. Claude
-#                 Code and the Claude desktop app cannot be given them
-#                 declaratively - see the activation script for why - so the
-#                 same generated list is merged into each of their own config
-#                 files instead.
+#                 them up through `enableMcpIntegration`, which puts them in
+#                 ~/.codex/config.toml as [mcp_servers.<name>] - merged into
+#                 that file rather than linked over it, for the reason the
+#                 "merged, not linked" section below gives. Claude Code and
+#                 the Claude desktop app cannot be given them declaratively -
+#                 see that same section - so the generated list is merged into
+#                 each of their own config files too.
 #
 #   skills        ~/.codex/skills/<name>/SKILL.md, one entry per skill.
 #                 Codex only follows a symlink of the skill *directory*, not
@@ -36,11 +42,6 @@
 # to be in configuration.nix. `codex app` installs it on demand, and it is the
 # same agent behind a GUI reading the same $CODEX_HOME, so it needs nothing of
 # its own: it picks up the config.toml and the skills below on first launch.
-# One thing follows from that: ~/.codex/config.toml is a read-only store
-# symlink, so a setting changed in the app's UI cannot be written back. Change
-# it here instead. If the app ever does replace the file, the next activation
-# backs the stray copy up as .before-nix and relinks, which loses the UI change
-# but breaks nothing.
 #
 # Not declarative and cannot be: the login. Once per machine, `codex login`,
 # or sign in inside the desktop app.
@@ -51,6 +52,12 @@ let
   # it rather than rebuilding the JSON keeps Claude Code's copy and Codex's
   # copy from drifting apart.
   declaredMcpServers = config.xdg.configFile."mcp/mcp.json".source;
+
+  # The config.toml home-manager's codex module generates, read back out of
+  # the option instead of rebuilt here, so `programs.mcp.servers` and
+  # `programs.codex.settings` stay the only place any of it is written down.
+  # The file itself is not linked into place - see "merged, not linked".
+  declaredCodexConfig = config.home.file.".codex/config.toml".source;
 in
 {
   ##########################################################################
@@ -111,6 +118,69 @@ in
   # string or a store path - neither can be an out-of-store link.
   home.file.".codex/AGENTS.md".source =
     config.lib.file.mkOutOfStoreSymlink "${config.home.homeDirectory}/.dotfiles/AGENTS.md";
+
+  ##########################################################################
+  # ~/.codex/config.toml: merged, not linked
+  #
+  # Codex writes this file itself, and not only for preferences. Trusting a
+  # folder - the question the TUI asks the first time you open a project - is
+  # stored in it too. A read-only store symlink makes every one of those
+  # writes fail: codex saves atomically, so it resolves the link, tries to
+  # create a temp file beside the target, lands in /nix/store and is denied.
+  #
+  #   failed to persist config at /nix/store/...-codex-config
+  #   Caused by: Permission denied (os error 13) at path "/nix/store/.tmpXXXX"
+  #
+  # The TUI then cannot get past its own trust prompt, so from the outside
+  # codex simply does not start. That is what this section exists to prevent.
+  #
+  # The deal is the same one the two Claude clients get below: Nix owns the
+  # content, the app keeps the file. `enable = false` drops home-manager's
+  # link, and the script merges the generated settings into the real file on
+  # every activation. The declared side wins on a key collision; everything
+  # codex put there - trusted projects, model, UI preferences - survives.
+  #
+  # The one thing a merge cannot do is remove. Drop a server from
+  # `programs.mcp.servers` and it stays in config.toml until it is deleted
+  # there as well.
+  ##########################################################################
+  home.file.".codex/config.toml".enable = false;
+
+  home.activation.codexConfig = lib.hm.dag.entryAfter [ "linkGeneration" ] ''
+    codexConfig="$HOME/.codex/config.toml"
+
+    if [ -n "''${DRY_RUN_CMD:-}" ]; then
+      echo "Would merge the declared Codex settings into $codexConfig"
+    else
+      mkdir -p "$(dirname "$codexConfig")"
+
+      # Left behind by a generation that did link this file. Nothing in it is
+      # worth keeping - it holds the same generated content, and being a link
+      # is exactly what broke codex.
+      if [ -L "$codexConfig" ]; then
+        rm -f "$codexConfig"
+      fi
+
+      work="$(${pkgs.coreutils}/bin/mktemp -d)"
+      ${pkgs.yj}/bin/yj -tj < ${declaredCodexConfig} > "$work/declared.json"
+
+      if [ -e "$codexConfig" ] &&
+         ! ${pkgs.yj}/bin/yj -tj < "$codexConfig" > "$work/existing.json" 2>/dev/null; then
+        echo "warning: $codexConfig is not valid TOML; left it alone." \
+             "Its MCP servers and skills were not updated." >&2
+      else
+        [ -e "$work/existing.json" ] || echo '{}' > "$work/existing.json"
+
+        if ${pkgs.jq}/bin/jq -s '.[0] * .[1]' \
+             "$work/existing.json" "$work/declared.json" > "$work/merged.json" &&
+           ${pkgs.yj}/bin/yj -jt < "$work/merged.json" > "$work/merged.toml"; then
+          ${pkgs.coreutils}/bin/install -m 600 "$work/merged.toml" "$codexConfig"
+        fi
+      fi
+
+      rm -rf "$work"
+    fi
+  '';
 
   ##########################################################################
   # The MCP servers of the two Claude clients
