@@ -63,7 +63,19 @@ While you work:
 
 - Save decisions, root causes, traps and constraints with `write_note` as they happen, without me asking.
 - Grow the note that already exists with `edit_note`. Never write a near-copy.
-- Shape: observations as `- [category] fact #tag`, links as `- relates_to [[Exact Note Title]]`, so the wikilinks resolve in Obsidian.
+- Write the note at its real path inside the project (`plans/`, `tasks/<ID>/`, `notes/local-dev/`...). A note dropped at the project root, or in a folder that mirrors the project name, is a stray copy that nobody finds. Move it or merge it, never leave two.
+
+How every note looks - this is the rule, not a style tip:
+
+- Short. Body under 350 words. A project state, overview or plan may go to 700. If it needs more, it is two notes.
+- Same voice as you talk to me: short words, short sentences, one idea per line, no naked jargon, no em dash.
+- Opens with a TLDR of 2-3 lines: what this is and why it matters. A reader who stops there already gets it.
+- Then 1-4 tiny sections, as lists, not paragraphs. Cut the story of how you got there. Keep only what changes what the reader does next.
+- Never drop a hard fact: ticket IDs, PR numbers, SHAs, table and flag names, commands, paths, dates, amounts, URLs. Commands go in fenced code.
+- Then `## Observations`: one line per fact, `- [category] plain sentence #tag`. Merge duplicates.
+- Then `## Relations`: `- relates_to [[Exact Note Title]]`. The title must exist, letter for letter, or the link is broken in Obsidian. Check with `search_notes` before linking. No link to a note that does not exist.
+- Frontmatter: `title`, `type`, `tags`. Skip `permalink`; Basic Memory writes it on sync. Never rename a title: other notes link to it.
+- After you write, `bm doctor` and `bm orphans --project <name>` must be clean.
 - Both doors work: the MCP tools inside a session, and the `bm` CLI in a shell - `bm tool search-notes`, `bm tool write-note`, `bm tool edit-note`, `bm tool recent-activity`. Use the CLI when you are already in a terminal or want to do many at once.
 
 Plans:
