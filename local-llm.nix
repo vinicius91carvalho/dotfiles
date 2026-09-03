@@ -184,7 +184,7 @@ let
     pkgs.writeText "omp-${name}-config.yml" ''
       modelRoles:
         plan: omlx/${modelId}:xhigh
-        default: omlx/${modelId}:medium
+        default: omlx/${modelId}:low
         vision: omlx/${modelId}:medium
         smol: omlx/${modelId}:low
         commit: omlx/${modelId}:low
@@ -420,6 +420,7 @@ let
       ${pkgs.gnugrep}/bin/grep -Eq "^[[:space:]]*contextWindow: $context$" "$omp_models"
       ${pkgs.gnugrep}/bin/grep -Eq "^[[:space:]]*thresholdTokens: $compact$" "$omp_config"
       ${pkgs.gnugrep}/bin/grep -Eq '^[[:space:]]*replayReasoningContent: false$' "$omp_models"
+      ${pkgs.gnugrep}/bin/grep -Eq "^[[:space:]]*default: omlx/${modelId}:low$" "$omp_config"
       echo "perfil $profile confere"
     }
 
