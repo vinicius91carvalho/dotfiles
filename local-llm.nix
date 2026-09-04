@@ -50,16 +50,16 @@ let
       memory = {
         prefill_memory_guard = true;
         memory_guard_tier = "custom";
-        memory_guard_custom_ceiling_gb = 27.0;
-        soft_threshold = 0.85;
-        hard_threshold = 0.95;
-        prefill_safe_zone_ratio = 0.8;
+        memory_guard_custom_ceiling_gb = 26.0;
+        soft_threshold = 0.9;
+        hard_threshold = 0.99;
+        prefill_safe_zone_ratio = 0.9;
         prefill_min_chunk_tokens = 32;
       };
       scheduler = {
         max_concurrent_requests = 1;
         embedding_batch_size = 1;
-        chunked_prefill = false;
+        chunked_prefill = true;
         prefill_priority = "context";
       };
       cache = {
@@ -71,8 +71,8 @@ let
         gdn_sidecar_precision = "fp32";
         ssd_cache_dir = "${config.home.homeDirectory}/.omlx/ssd-cache";
         ssd_cache_max_size = "60GB";
-        hot_cache_max_size = "2GB";
-        initial_cache_blocks = 256;
+        hot_cache_max_size = "0GB";
+        initial_cache_blocks = 64;
       };
       sampling.max_context_window = 262144;
     }
@@ -121,6 +121,7 @@ let
         turboquant_kv_bits = 3.5;
         mtp_enabled = true;
         specprefill_enabled = false;
+        preserve_thinking = false;
       };
     }
   );
@@ -137,6 +138,7 @@ let
         specprefill_draft_model = "${config.home.homeDirectory}/tools/qwen3.8-27b/mlx-community/Qwen3.5-0.8B-MLX-bf16";
         specprefill_keep_pct = 0.2;
         specprefill_threshold = 8192;
+        preserve_thinking = false;
       };
     }
   );
@@ -378,8 +380,13 @@ let
              | ${pkgs.jq}/bin/jq -r '.default_model // "nenhum"')"
         pid=$(/usr/sbin/lsof -nP -iTCP:1337 -sTCP:LISTEN -t 2>/dev/null | head -1 || true)
         if [ -n "$pid" ]; then
-          printf 'memoria residente: %s GB\n' \
-            "$(/bin/ps -o rss= -p "$pid" | ${pkgs.gawk}/bin/awk '{printf "%.1f", $1/1048576}')"
+          footprint_bytes=$(/usr/bin/footprint -p "$pid" -f bytes --noCategories 2>/dev/null \
+            | ${pkgs.gnused}/bin/sed -n 's/.*Footprint: \([0-9]*\) B.*/\1/p' \
+            | head -1)
+          if [ -n "$footprint_bytes" ]; then
+            printf 'memoria do processo: %s GB\n' \
+              "$(printf '%s\n' "$footprint_bytes" | ${pkgs.gawk}/bin/awk '{printf "%.1f", $1/1073741824}')"
+          fi
         fi
       else
         printf 'servidor         : fora\n'
@@ -399,7 +406,7 @@ let
 
       case "$profile" in
         daily)
-          context=30000; compact=25000; ceiling=27; chunked=false; hot=2GB; spec=false ;;
+          context=30000; compact=25000; ceiling=26; chunked=true; hot=0GB; spec=false ;;
         scan64)
           context=65536; compact=60000; ceiling=28; chunked=true; hot=0GB; spec=true ;;
         *)
@@ -416,7 +423,8 @@ let
       ${pkgs.jq}/bin/jq -e --arg model "${modelId}" --argjson spec "$spec" \
         '.models[$model].turboquant_kv_bits == 3.5 and
          .models[$model].mtp_enabled == true and
-         .models[$model].specprefill_enabled == $spec' "$model_settings" >/dev/null
+         .models[$model].specprefill_enabled == $spec and
+         .models[$model].preserve_thinking == false' "$model_settings" >/dev/null
       ${pkgs.gnugrep}/bin/grep -Eq "^[[:space:]]*contextWindow: $context$" "$omp_models"
       ${pkgs.gnugrep}/bin/grep -Eq "^[[:space:]]*thresholdTokens: $compact$" "$omp_config"
       ${pkgs.gnugrep}/bin/grep -Eq '^[[:space:]]*replayReasoningContent: false$' "$omp_models"
@@ -620,28 +628,6 @@ lib.mkIf (memGb > 32) {
           # limits. Host, port and model directory do not vary, so they remain
           # process flags here.
           #
-          # The ceiling is not the prefill budget. oMLX derives the prefill cap
-          # as ceiling * soft_threshold (0.85), and the resident model is
-          # 18.76 GB, so a 24 GB ceiling left 24 * 0.98 * 0.85 = 20.0 GB of cap
-          # and only ~1.2 GB of room for the prefill working set. With
-          # `prefill_priority = "context"` (the default) the scheduler does not
-          # refuse a prompt that does not fit - it shrinks the step down to
-          # `prefill_min_chunk_tokens` (32) and grinds. Measured on this
-          # machine: a 12.6k-token prompt took 23 MINUTES at 9 tok/s, and a
-          # 33k one was refused outright.
-          #
-          # 27 GB puts the cap near 22.5 GB, tripling that headroom, and stays
-          # under Apple's own Metal cap for this Mac (28.1 GB,
-          # max_recommended_working_set_size) so nothing spills.
-          #
-          # Both profiles use one concurrent request: every extra
-          # in-flight request carries its own KV cache, and eight of them do not
-          # fit next to 17.4 GB of weights.
-          #
-          # The SSD cache is the whole reason to run oMLX instead of plain
-          # mlx-lm for coding agents: it persists the KV cache of repeated
-          # prompt prefixes, which is what turns a 30-90 s time-to-first-token
-          # on a large repo into 1-3 s.
           exec "$cli" serve \
             --model-dir "$models" \
             --host 127.0.0.1 \

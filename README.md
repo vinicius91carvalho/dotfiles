@@ -642,11 +642,12 @@ reason worth reading.
 
 | Metric | Value |
 | --- | --- |
-| tg (generation) | **32.2 tok/s** |
+| tg (generation) | **21-24 tok/s** over the 10-turn code test; 32.2 tok/s best measured |
 | pp (prefill) at 4k | **158 tok/s** |
 | pp (prefill) at 12.6k | **137 tok/s** |
 | pp with a cached prefix | 4,143 tok/s effective (12.6k in 3.0 s) |
-| Largest context accepted | 33.1k tokens, 24.7 GB peak |
+| Daily 25K, 10 turns | 24 GB oMLX process peak, 10/10 correct, no new swap |
+| Exact 64K memory-safe experiment | passed, but needed 9 minutes and left only 16 MB free RAM |
 
 ### Driving it from OMP
 
@@ -663,7 +664,7 @@ omp
 ```
 
 It gives OMP a 30K exact window, compacts at 25K, keeps image input, disables
-old thinking replay, and uses the 27 GB oMLX guard. Exact means no prompt lines
+old thinking replay, and uses the 26 GB oMLX guard. Exact means no prompt lines
 are dropped. The stable SSD prefix still covers the large system/tool prefix.
 
 Use the scan profile only for a large, text-only repository pass:
@@ -720,15 +721,15 @@ Two settings were arrived at by measurement, not by taste, and both live in
 
 | Setting | Measured effect on this M3 Max |
 | --- | --- |
-| daily memory guard 27 GB (was 24) | a 12.6k-token prompt: **23 min → 92 s** |
+| daily memory guard 26 GB | 25K over 10 turns: **24 GB process peak, 10/10 correct, no new swap** |
 | scan64 memory guard 28 GB | completed the tested 64K SpecPrefill request without new swap |
 | `mtp_enabled` (per-model) | generation: **17.2 → 32.2 tok/s** |
 
-The first one is the counter-intuitive one. The prefill working set is ~10 MB
-per token, so a 2048-token chunk wants 21 GB; a ceiling too low does not
-protect anything, because `prefill_priority = "context"` shrinks the chunk to
-its 32-token floor instead of refusing the prompt. 27 GB stays under Apple's
-own Metal cap for this Mac (28.1 GB).
+The daily profile now keeps the oMLX process below 26 GB. The 25K cold turn
+took 168 seconds; nine cached turns took 4-8 seconds. The SSD cache stays
+enabled, but its RAM-only hot tier is zero so Chrome and Docker keep more
+headroom. Going lower is counter-productive: at 24 GB the scheduler shrank
+prefill chunks to their 32-token floor and a 12.6K prompt took 23 minutes.
 
 Generation is capped by memory bandwidth: 300 GB/s ÷ 17.4 GB ≈ 17 tok/s, which
 is what B0 measured. MTP is what beats it, by verifying several drafted tokens
