@@ -690,11 +690,15 @@ server advertises. oMLX does not truncate, does not compact and has no context
 shifting: past the window it returns `HTTP 400 "Prompt too long"`. Compaction is
 the agent's job and omp only compacts if it knows the real window.
 
-30000 and not less because omp's own floor is large: measured here, a one-line
-question inside `find-best-job` already sends 22.3k–23.2k tokens of system
-prompt, tool definitions and instruction files. It stays workable because that
-floor is a stable prefix the SSD cache serves — `re-prefills 8892 of 23228
-tokens`, turns of 20-26 s instead of the 139 s first cold run.
+The default `omp` shell alias keeps the seven high-value coding tools plus
+checkpoint and rewind. Measured on OMP 18.1.10 with a one-line question, this
+sends 10,531 input tokens. The unrestricted tool set sends 18,610. That leaves
+about 14.5K tokens for code and conversation before the 25K compaction point,
+instead of only 6.4K. Docker remains available through bash.
+
+Use `omp-web` when the task needs browser automation or web search. Use
+`omp-full` for the rare task that needs every OMP tool. A new shell picks up
+these aliases after rebuild. The full workflow is in [`OMP.md`](OMP.md).
 
 Roles carry a thinking level (`plan:xhigh`, `default:medium`, `smol:low`,
 `commit:low`). The template accepts only `low`, `medium` and `xhigh`; oMLX

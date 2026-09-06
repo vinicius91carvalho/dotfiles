@@ -47,6 +47,7 @@ let
   dailyOmlxPatch = pkgs.writeText "omlx-daily-settings.json" (
     builtins.toJSON {
       model.hide_helper_models = true;
+      idle_timeout.idle_timeout_seconds = null;
       memory = {
         prefill_memory_guard = true;
         memory_guard_tier = "custom";
@@ -81,6 +82,7 @@ let
   scan64OmlxPatch = pkgs.writeText "omlx-scan64-settings.json" (
     builtins.toJSON {
       model.hide_helper_models = true;
+      idle_timeout.idle_timeout_seconds = null;
       memory = {
         prefill_memory_guard = true;
         memory_guard_tier = "custom";
@@ -194,20 +196,39 @@ let
       personality: none
       includeModelInPrompt: false
       tools:
-        xdevForceMount:
-          - hub
-          - eval
-          - task
-          - todo
-          - web_search
+        xdev: true
         xdevDocs: catalog
+      checkpoint:
+        enabled: true
       compaction:
         thresholdTokens: ${toString threshold}
         keepRecentTokens: 3000
         reserveTokens: 2500
+        midTurnEnabled: true
+        asyncEnabled: true
+        supersedeReads: true
+        dropUseless: true
         idleEnabled: true
         idleThresholdTokens: ${toString idleThreshold}
         idleTimeoutSeconds: 120
+      read:
+        defaultLimit: 200
+        summarize:
+          enabled: true
+          prose: false
+          minTotalLines: 100
+          unfoldUntil: 50
+          unfoldLimit: 100
+      grep:
+        contextBefore: 1
+        contextAfter: 2
+      lsp:
+        enabled: true
+        lazy: true
+        shared: true
+        diagnosticsOnWrite: true
+        diagnosticsOnEdit: true
+        diagnosticsDeduplicate: true
       defaultThinkingLevel: low
       thinkingBudgets:
         xhigh: 6000
@@ -415,7 +436,8 @@ let
 
       ${pkgs.jq}/bin/jq -e \
         --argjson ceiling "$ceiling" --argjson chunked "$chunked" --arg hot "$hot" \
-        '.memory.memory_guard_custom_ceiling_gb == $ceiling and
+        '.idle_timeout.idle_timeout_seconds == null and
+         .memory.memory_guard_custom_ceiling_gb == $ceiling and
          .scheduler.max_concurrent_requests == 1 and
          .scheduler.chunked_prefill == $chunked and
          .cache.enabled == true and
@@ -580,6 +602,12 @@ in
 lib.mkIf (memGb > 32) {
 
   home.packages = [ omlxctl ];
+
+  programs.zsh.shellAliases = {
+    omp = "/opt/homebrew/bin/omp --tools=read,bash,edit,write,grep,glob,lsp,checkpoint,rewind";
+    "omp-web" = "/opt/homebrew/bin/omp";
+    "omp-full" = "/opt/homebrew/bin/omp";
+  };
 
   # Reapply the last selected profile on every rebuild. The profile name is
   # state, while every value it selects lives above in this Nix file.
