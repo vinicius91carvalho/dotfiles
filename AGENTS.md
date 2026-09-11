@@ -115,6 +115,7 @@ It points, it does not repeat: one line per item, with a `[[link]]` to the note 
 - Commit messages carry no agent name and no co-author line.
 - Generated files (CHANGELOG.md and friends) change through their source, not by hand.
 - Commit, push or open a pull request only when I ask.
+- Before any push or pull request, the project's own checks run and pass: build, vet, every test suite (unit tests included), gosec, and whatever else the repo's Makefile, lint config or CI runs. One red check stops the push. The output of the run goes in the report, not "tests pass".
 
 ## Subagents
 

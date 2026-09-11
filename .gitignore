@@ -7,3 +7,8 @@ result-*
 # herdr left this behind: runtime logs, sockets and session state from a
 # tool this config no longer declares (Orca replaced it). Never repo content.
 .config/herdr/
+
+# built on demand by nova/skills/nova-shared/scripts/strip-comments.sh
+nova/skills/nova-shared/scripts/strip-comments-bin
+
+__pycache__/
