@@ -62,6 +62,11 @@ While you work:
 - Save decisions, root causes, traps and constraints as they happen, without being asked.
 - Grow the note that already exists. One note per topic.
 - Write the note at its real path inside the project (`plans/`, `tasks/<ID>/`, `notes/local-dev/`...). A note at the project root, or in a folder that mirrors the project name, is a stray copy nobody finds: move it or merge it.
+- A state or status note is edited, not appended to. When a fact changes, replace the line. A note that only grows by dated sections is a log, not a note: prune it the same day, before it becomes 10,000 words nobody reads.
+- One fact lives in one note. Every other note links to it. Two copies of the same fact drift apart, and the wrong one gets read later.
+- Check before you write: a fact from an earlier session gets one grep or one look at the code before it goes into a new note. A `[[link]]` only goes to a title you have confirmed exists. A fact you just found this session needs neither.
+- Before a new folder, or a new project for a note, look at what the project already has. A second folder for the same idea in another language, or a note filed under the wrong project, is a stray copy.
+- No real ID number, birthdate or other person's private data in a note, not even as a bug example. A placeholder teaches the same lesson.
 
 How every note looks:
 
@@ -74,7 +79,7 @@ How every note looks:
 - After writing, `bm doctor` and `bm orphans --project <name>` come back clean.
 - Both doors work: the MCP tools in a session, and the `bm tool ...` CLI in a shell.
 
-Plans: every plan is a note in `plans/`. The file in `~/.claude/plans/` is a scratchpad, copied over when planning ends and kept identical. Update that same note as things move. A finished plan is marked finished and kept.
+Plans: every plan is a note in `plans/`. The file in `~/.claude/plans/` is a scratchpad, copied over when planning ends and kept identical. Update that same note as things move. Mark it finished, dead or superseded the day you know it, not later. A finished plan is marked finished and kept.
 
 State: every project has one `STATE.md` at its root, the only note allowed there. It is the door every session opens first, so any agent picks up where the last one paused:
 
