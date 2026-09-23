@@ -14,6 +14,15 @@
 
   users.users.${username}.home = "/Users/${username}";
 
+  system.activationScripts.postActivation.text = ''
+    uid=$(id -u ${username})
+    if ! launchctl print "gui/$uid/com.setapp.DesktopClient.SetappAgent" >/dev/null 2>&1; then
+      echo >&2 "Setapp agents are not loaded, restarting Setapp to restore them..."
+      pkill -x -u "$uid" Setapp && sleep 3
+      launchctl asuser "$uid" sudo --user=${username} open -g -a Setapp
+    fi
+  '';
+
   # Claude Code comes from the `claude-code@latest` cask declared below, not
   # from its native installer. Only ever use one: the native installer puts a
   # `claude` in ~/.local/bin that shadows the cask's, and the two then update
