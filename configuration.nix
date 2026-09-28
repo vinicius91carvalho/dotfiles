@@ -133,6 +133,12 @@
       # model roles and compaction limits are applied by the Nix-owned
       # `omlxctl profile` command in local-llm.nix.
       "omp"
+      # JDK 17 for the Android toolchain: sdkmanager, avdmanager, Gradle and
+      # Bubblewrap (find-best-job's Android app, a TWA) all need it, and macOS
+      # only ships a /usr/bin/java stub that fails. 17 is the version
+      # Bubblewrap supports. home.nix points JAVA_HOME at this keg, and the
+      # Android SDK setup in home.nix points Bubblewrap at it.
+      "openjdk@17"
       # neovim intentionally not here — it comes from Nix via home.nix, so its
       # version is pinned by flake.lock rather than tracking Homebrew.
     ];
@@ -203,6 +209,11 @@
       # state in ~/.orca.
       "stablyai/orca/orca"
       "google-chrome"
+      # Android's sdkmanager and avdmanager. They only bootstrap the SDK: the
+      # SDK itself (emulator, platform, system images) lives in
+      # ~/Library/Android/sdk and is installed by the androidSdk activation
+      # step in home.nix, which runs these tools.
+      "android-commandlinetools"
       "visual-studio-code"
       "dbeaver-community"
       "slack"

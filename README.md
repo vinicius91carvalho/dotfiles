@@ -183,6 +183,7 @@ grep -rn "vinicius91carvalho" --include="*.nix" .
 | `home.nix` | User: shell, git, ghostty, neovim, CLI tools, fonts, ssh |
 | `codex.nix` | Codex, and the MCP servers both it and Claude Code use |
 | `local-llm.nix` | The local LLM server, on machines with more than 32 GB |
+| `android.nix` | Android SDK, emulators and Bubblewrap for the find-best-job app |
 | `.config/` | Config directories, mirroring `~/.config` (nvim) |
 | `rebuild.sh` | Applies everything |
 
@@ -196,7 +197,8 @@ rebuild.sh → darwin-rebuild switch --impure --flake ~/.dotfiles#mac
                      ├── nix-homebrew       → owns the Homebrew install
                      └── home-manager       → home.nix, my dotfiles
                            ├── codex.nix    → the coding agents
-                           └── local-llm.nix
+                           ├── local-llm.nix
+                           └── android.nix  → Android SDK and emulators
 ```
 
 `mac` is a config name, not a hostname, so this works on any Mac.

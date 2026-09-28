@@ -13,6 +13,12 @@
     # (config.toml, an instructions link and two activation scripts), and that
     # reads better together than scattered through this file.
     ./codex.nix
+
+    # The Android SDK, emulators and Bubblewrap for find-best-job's Android
+    # app. Its own file because most of it is one activation step that
+    # installs Google's SDK, which neither Homebrew nor nixpkgs ships in a form
+    # that runs the arm64 emulator.
+    ./android.nix
   ];
 
   home.username = username;
