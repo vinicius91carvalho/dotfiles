@@ -126,3 +126,10 @@ It points, it does not repeat: one line per item, with a `[[link]]` to the note 
 
 - One agent, and only for big work that truly splits into parallel parts.
 - A critical change gets a review in a fresh context: a forked agent that never watched the code being written. Your own context reviewing your own work is not a review.
+
+## Models and effort
+
+- Always the newest Opus and the newest Sonnet.
+- Planning: Opus, effort high. A very complex project: Opus, effort xhigh.
+- General implementation: Sonnet, effort high, or xhigh when the change needs more thought.
+- Hard or complex implementation: Opus, effort high.
