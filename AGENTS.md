@@ -124,8 +124,10 @@ It points, it does not repeat: one line per item, with a `[[link]]` to the note 
 
 ## Subagents
 
-- One agent, and only for big work that truly splits into parallel parts.
-- A critical change gets a review in a fresh context: a forked agent that never watched the code being written. Your own context reviewing your own work is not a review.
+- Writing tests always goes to a subagent. It writes the test code and hands it back.
+- Running the tests, deploying, checking the result and the full review happen in the main agent only. Never spawn subagents for these, and never a swarm of agents for one job.
+- Beyond tests: one agent, and only for big work that truly splits into parallel parts.
+- A subagent never spawns another subagent. Only the main agent delegates.
 
 ## Models and effort
 
