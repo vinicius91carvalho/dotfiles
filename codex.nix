@@ -259,6 +259,9 @@ in
   # tree - and the `skills` array in .claude-plugin/plugin.json is the list
   # Claude Code itself loads. A plugin with no such array falls back to a
   # glob, which is the shape of a plugin that publishes everything it has.
+  # `skills` may also be a string naming that folder (temporal 0.4.2 ships
+  # "./skills/"); the glob then runs there, since `.[]` on a string makes jq
+  # exit 5 and stops the whole activation.
   #
   # It only ever removes links it made itself - the ones pointing into the
   # plugin cache - so the Nix-managed skill entries beside them survive, and a
@@ -293,14 +296,17 @@ in
         if [ -f "$manifest" ]; then
           pluginRoot="$(dirname "$(dirname "$manifest")")"
 
-          declared="$(${pkgs.jq}/bin/jq -r '(.skills // []) | .[]' "$manifest" 2>/dev/null)"
+          declared="$(${pkgs.jq}/bin/jq -r '.skills // [] | if type == "array" then .[] else empty end' "$manifest" 2>/dev/null)"
+          skillsDir="$(${pkgs.jq}/bin/jq -r '.skills | if type == "string" then . else "skills" end' "$manifest" 2>/dev/null)"
+          skillsDir="$pluginRoot/''${skillsDir#./}"
+          skillsDir="''${skillsDir%/}"
 
           if [ -n "$declared" ]; then
             while IFS= read -r relative; do
               linkCodexSkill "$pluginRoot/''${relative#./}"
             done <<< "$declared"
           else
-            for skillFile in "$pluginRoot"/skills/*/SKILL.md "$pluginRoot"/skills/*/*/SKILL.md; do
+            for skillFile in "$skillsDir"/*/SKILL.md "$skillsDir"/*/*/SKILL.md; do
               if [ -f "$skillFile" ]; then
                 linkCodexSkill "$(dirname "$skillFile")"
               fi

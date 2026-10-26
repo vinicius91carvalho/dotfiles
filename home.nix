@@ -45,6 +45,7 @@
   home.packages = with pkgs; [
     tree
     wget
+    postgresql
 
     # Patched font with icon glyphs. The nvim UI (file icons, statusline
     # separators) and starship both need a Nerd Font to render properly.

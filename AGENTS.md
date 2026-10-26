@@ -36,6 +36,12 @@
 - Same when I paste a teammate's comment: it is a claim until you check it, and I decide what we do.
 - Every line you add has a one-sentence why with a source. "Safer", "best practice", "in case" and "the bot asked" are not whys. On Nova work the long form is `nova-shared/references/answering-a-challenge.md`.
 
+## Installing a tool: always through Nix, in the dotfiles
+
+- Any tool this machine needs (a CLI, an app, a client like `psql`) is added to `~/github/vinicius91carvalho/dotfiles`, then `./rebuild.sh` installs it.
+- Where it goes: a home-manager `programs.<name>` module, else `home.packages` in `home.nix`. Only a tool nixpkgs cannot build for macOS goes in `homebrew.brews` or `casks` in `configuration.nix`.
+- Never a bare `brew install`, `npm -g`, `pip install` or a binary dropped on PATH. Why: `onActivation.cleanup = "zap"` deletes every formula the config does not name on the next rebuild, and a hand install never reaches the next machine.
+
 ## Web apps, SaaS, dashboards: you drive Chrome
 
 - Settings, deploys, cloud consoles, sign-ups, logins, forms, payments, sending messages: you do them, with claude-in-chrome. Write the steps as one short list, open a tab, do them, screenshot as proof, tell me it is done.
